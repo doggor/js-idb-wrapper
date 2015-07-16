@@ -1,0 +1,31 @@
+{
+  "name": "js-idb-wrapper",
+  "version": "0.0.1",
+  "authors": [
+    "Andy Ching <dogdoglization@gmail.com>"
+  ],
+  "description": "an indexedDB wrapper",
+  "main": "release/idb.js",
+  "moduleType": [
+    "amd",
+    "es6",
+    "globals",
+    "node",
+    "yui"
+  ],
+  "keywords": [
+    "indexeddb",
+    "wrapper"
+  ],
+  "license": "MIT",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "q": "1.0.1"
+  }
+}

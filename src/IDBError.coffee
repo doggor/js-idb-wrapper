@@ -1,0 +1,1 @@
+class IDBError extends Error then constructor: (@message)->

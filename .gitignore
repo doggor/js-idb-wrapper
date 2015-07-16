@@ -1,0 +1,6 @@
+logs
+/bower_components
+/node_modules
+/.classpath
+/.project
+/.settings
