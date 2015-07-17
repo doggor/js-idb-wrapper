@@ -1,11 +1,38 @@
 (function() {
-  var Database, DatabaseManager, IDBError, IDBKeyRange, IDBRequest2Q, IDBTransaction, IDBTx2Q, Query, Schema, Store, env, indexedDB, msg,
+  var Database, DatabaseManager, IDBError, IDBKeyRange, IDBRequest2Q, IDBTransaction, IDBTx2Q, Query, Schema, Store, env, indexedDB, msg, newDefer, toPromise,
     extend = function(child, parent) { for (var key in parent) { if (hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; },
     hasProp = {}.hasOwnProperty,
     slice = [].slice,
     indexOf = [].indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; };
 
   env = window || self || global || this;
+
+  if (typeof env.Promise !== "undefined") {
+    newDefer = function() {
+      return new Promise;
+    };
+    toPromise = function(deferred) {
+      return deferred;
+    };
+  } else if (typeof env.Q !== "undefined") {
+    newDefer = function() {
+      return Q.defer();
+    };
+    toPromise = function(deferred) {
+      return deferred.promise;
+    };
+  } else if (typeof env.jQuery !== "undefined") {
+    newDefer = function() {
+      return jQuery.Deferred();
+    };
+    toPromise = function(deferred) {
+      return deferred.promise({
+        "catch": function(fn) {
+          return this.fail(fn);
+        }
+      });
+    };
+  }
 
   indexedDB = env.indexedDB || env.mozIndexedDB || env.webkitIndexedDB || env.msIndexedDB;
 
@@ -22,7 +49,7 @@
     request.onerror = function(event) {
       return d.reject(event);
     };
-    return d.promise;
+    return toPromise(d);
   };
 
   IDBTx2Q = function(tx) {
@@ -34,7 +61,7 @@
     tx.onerror = tx.onabort = function(event) {
       return d.reject(event);
     };
-    return d.promise;
+    return toPromise(d);
   };
 
   IDBError = (function(superClass) {
@@ -220,7 +247,7 @@
       r.onerror = function(event) {
         return d.reject(event);
       };
-      return d.promise;
+      return toPromise(d);
     };
 
     Query.prototype.first = function(func) {
@@ -431,7 +458,7 @@
     Database.prototype.getIDBDatabase = function() {
       var r;
       if (_idbDatabase != null) {
-        return newDefer().resolve(_idbDatabase).promise;
+        return toPromise(newDefer().resolve(_idbDatabase));
       } else {
         r = indexedDB.open(_name, _version);
         r.onblocked = _onVersionConflictHandler;
@@ -446,7 +473,7 @@
 
     Database.prototype.getIDBTransaction = function(storeNames, mode) {
       if (_batchTx) {
-        return newDefer().resolve(_batchTx).promise;
+        return toPromise(newDefer().resolve(_batchTx));
       } else {
         return this.getIDBDatabase().then(function(idb) {
           return idb.transaction(storeNames, mode);

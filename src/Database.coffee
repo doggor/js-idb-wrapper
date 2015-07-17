@@ -40,7 +40,7 @@ class Database
 	#getter of IDBDatabase object which this object refer to
 	getIDBDatabase: ()->
 		if _idbDatabase?
-			newDefer().resolve(_idbDatabase).promise
+			toPromise newDefer().resolve(_idbDatabase)
 		else
 			r = indexedDB.open(_name, _version)
 			r.onblocked = _onVersionConflictHandler
@@ -54,7 +54,7 @@ class Database
 	#or return a new IDBTransaction object
 	getIDBTransaction: (storeNames, mode)->
 		if _batchTx
-			newDefer().resolve(_batchTx).promise
+			toPromise newDefer().resolve(_batchTx)
 		else
 			@getIDBDatabase().then (idb)->
 				idb.transaction(storeNames, mode)

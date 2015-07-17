@@ -41,7 +41,7 @@ class Query
 				d.resolve(event)
 		r.onerror = (event)->d.reject(event)
 		
-		d.promise
+		toPromise d
 	
 	
 	#setter of result handler in which only the first reached result will pass in
