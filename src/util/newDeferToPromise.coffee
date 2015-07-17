@@ -13,3 +13,6 @@ else if typeof env.jQuery isnt "undefined"
 	newDefer = ()-> jQuery.Deferred()
 	toPromise = (deferred)->
 		deferred.promise(catch : (fn)-> @fail(fn))
+
+else
+	throw new IDBError "Not compatible promise function found."

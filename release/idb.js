@@ -32,6 +32,8 @@
         }
       });
     };
+  } else {
+    throw new IDBError("Not compatible promise function found.");
   }
 
   indexedDB = env.indexedDB || env.mozIndexedDB || env.webkitIndexedDB || env.msIndexedDB;
