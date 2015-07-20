@@ -20,8 +20,8 @@ class Schema
 		
 		
 		addIndex: (name, key, isUnique, isMultiEntry)->
-			if @indexes[name]
-				throw new IDBError("index(#{name}) duplicated at ObjectStore(#{@name}).")
+			if @indexes.hasOwnProperty name
+				throw new IDBError "index(#{name}) duplicated at ObjectStore(#{@name})."
 			else
 				@indexes[name] =
 					name: name
@@ -37,29 +37,32 @@ class Schema
 	#param (Object) dbDefinition
 	constructor: (dbDefinition)->
 		
+		if typeof dbDefinition isnt "object"
+			throw new IDBError "The database definition must be JSON."
+		
 		#scan db definition and fill the schema
 		for storeName, storeDfn of dbDefinition
 			
 			#check error
 			if typeof storeName isnt "string"
-				throw new IDBError("Store name must be string.")
+				throw new IDBError "Store name must be string."
 				break
 			
 			#check error
 			else if typeof storeDfn isnt "object" or storeDfn not instanceof Array
-				throw new IDBError("The definition of store(#{storeName}) must be in array.")
+				throw new IDBError "The definition of store(#{storeName}) must be in array."
 				break
 				
 			else
 				
-				store = new @Store(storeName)
+				store = new @constructor.Store(storeName)
 				
 				#scan store's indexes
 				for dfn in storeDfn
 					
 					#check error
 					if typeof dfn isnt "string"
-						throw new IDBError("Index definition must be in string form.")
+						throw new IDBError "Index definition must be in string form."
 						break
 					
 					#convert index definition into store object
@@ -72,16 +75,17 @@ class Schema
 							.replace /\s?\(\s?/g  , "("
 							.replace /\s?\)\s?/g  , ")"
 							.replace /\s?,\s?/g   , ","
-							.replace /\s?.\s?/g   , "."
+							.replace /\s?\+\s?/g  , "+"
+							.replace /\s?\.\s?/g  , "."
 						
 						if dfn.match /^KEY/
 							if store.option.keyPath?
 								throw new IDBError("Store key duplicated.")
 							
-							else if dfn.match /^KEY\(.+\)/
+							if dfn.match /^KEY\(.+\)/
 								store.option.keyPath = string2KeyPath dfn[4...dfn.indexOf ")"]
 							
-							if dfn.match /( AUTO)$/
+							if dfn.match /AUTO$/
 								store.option.autoIncrement = true
 						else
 							indexName = dfn.replace(/\(.+\)/, "").replace(/( UNIQUE)$/, "")
@@ -114,8 +118,10 @@ class Schema
 	#  "country+city+region+street" -> ["country","city","region","street"]
 	#  "info.email" -> ["info","email"]
 	string2KeyPath = (string)->
-		if string.search(/(,|\+)/) > -1
-			(string2KeyPath(keyPath) for keyPath in string.split /(,|\+)/ )
+		if string.indexOf(",") > -1
+			( string2KeyPath(keyPath) for keyPath in string.split "," )
+		else if string.indexOf("+") > -1
+			( string2KeyPath(keyPath) for keyPath in string.split "+" )
 		else
 			string = string.replace(".", ",") if string.indexOf(".") > -1
 			

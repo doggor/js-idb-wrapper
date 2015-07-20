@@ -1,1 +1,3 @@
-class IDBError extends Error then constructor: (@message)->
+class IDBError extends Error
+	constructor: (@message)->
+		console.error "IDBError: #{@message}"

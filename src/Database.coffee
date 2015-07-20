@@ -30,6 +30,7 @@ class Database
 		#define the database only if the version is larger
 		else if _version is null or _version <= versionNumber
 			_schema = new Schema(dbDefination)
+			_version = versionNumber
 	
 	
 	#setter of IDBOpenDBRequest.onblocked handler
@@ -40,7 +41,9 @@ class Database
 	#getter of IDBDatabase object which this object refer to
 	getIDBDatabase: ()->
 		if _idbDatabase?
-			toPromise newDefer().resolve(_idbDatabase)
+			d = newDefer()
+			d.resolve(_idbDatabase)
+			toPromise d
 		else
 			r = indexedDB.open(_name, _version)
 			r.onblocked = _onVersionConflictHandler
@@ -54,7 +57,9 @@ class Database
 	#or return a new IDBTransaction object
 	getIDBTransaction: (storeNames, mode)->
 		if _batchTx
-			toPromise newDefer().resolve(_batchTx)
+			d = newDefer()
+			d.resolve(_batchTx)
+			toPromise d
 		else
 			@getIDBDatabase().then (idb)->
 				idb.transaction(storeNames, mode)
@@ -113,58 +118,61 @@ class Database
 	
 	
 	doUpgrade = (idb)->
-	
-		return if _schema isnt null
+		
+		if _schema is null
+			throw new IDBError "Schema not found."
 		
 		#list of functions that make change to the db
 		actions = []
 		
-		currentStoreNames = db.objectStoreNames
+		currentStoreNames = idb.objectStoreNames
 		
-		tx = db.transaction(currentStoreNames, "readwrite")
-		
-		
-		for storeName in currentStoreNames
+		if currentStoreNames.length > 0
+			tx = idb.transaction(currentStoreNames, "readwrite")
 			
-			#update existed stores
-			if _schema.stores.hasOwnProperty storeName
-				store = tx.objectStore(storeName)
-				currentIndexNames = store.indexNames
-				storeSchema = _schema.stores[storeName]
-				
-				for indexName in currentIndexNames
+			for storeName in currentStoreNames
+				do (storeName)->
+					#update existed stores
+					if _schema.stores.hasOwnProperty storeName
+						store = tx.objectStore(storeName)
+						currentIndexNames = store.indexNames
+						storeSchema = _schema.stores[storeName]
+						
+						for indexName in currentIndexNames
+							do (indexName)->
+								if storeSchema.indexes.hasOwnProperty indexName
+									index = store.index(indexName)
+									indexSchema = storeSchema.indexes[indexName]
+									
+									#adding UNIQUE for existed index is not allow
+									if not index.unique and indexSchema.option.unique
+										throw new IDBError("Turning existed index(#{indexName}) to be unique is not allowed.")
+									
+									#rebuild the index if any changes on schema
+									#TAKE YOU"RE OWN RISK!!
+									if (index.keyPath isnt indexSchema.key or
+									index.unique isnt indexSchema.option.unique or
+									index.multiEntry isnt indexSchema.option.multiEntry)
+										actions.push ->store.deleteIndex(indexName)
+										actions.push ->store.createIndex(indexName, indexSchema.key, indexSchema.option)
+									
+								#remove unused index
+								else
+									actions.push ->store.deleteIndex(indexName)
 					
-					if storeSchema.indexes.hasOwnProperty indexName
-						index = store.index(indexName)
-						indexSchema = storeSchema.indexes[indexName]
-						
-						#adding UNIQUE for existed index is not allow
-						if not index.unique and indexSchema.option.unique
-							throw new IDBError("Turning existed index(#{indexName}) to be unique is not allowed.")
-						
-						#rebuild the index if any changes on schema
-						#TAKE YOU"RE OWN RISK!!
-						if (index.keyPath isnt indexSchema.key or
-						index.unique isnt indexSchema.option.unique or
-						index.multiEntry isnt indexSchema.option.multiEntry)
-							actions.push ->store.deleteIndex(indexName)
-							actions.push ->store.createIndex(indexName, indexSchema.key, indexSchema.option)
-						
-					#remove unused index
+					#remove unused stores
 					else
-						actions.push ->store.deleteIndex(indexName)
+						actions.push ->idb.deleteObjectStore(storeName)
 			
-			#remove unused stores
-			else
-				actions.push ->db.deleteObjectStore(storeName)
-		
 		
 		#create newly added stores
 		for storeName, storeSchema of _schema.stores when storeName not in currentStoreNames
-			store = db.createObjectStore storeName, storeSchema.option
+			store = idb.createObjectStore(storeName, storeSchema.option)
 			
-			for indexName, indexSchema of storeSchema
-				actions.push ->store.createIndex(indexName, indexSchema.key, indexSchema.option)
+			for indexName, indexSchema of storeSchema.indexes
+				do (store, indexName, indexSchema)->
+					actions.push ->
+						store.createIndex(indexName, indexSchema.key, indexSchema.option)
 		
 		
 		#seems no any error, perform upgrade now

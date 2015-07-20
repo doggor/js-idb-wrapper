@@ -2,7 +2,7 @@ class Store
 	
 	_name =   #name of the store
 	
-	_db =   #the Database object belong to
+	_db = null  #the Database object belong to
 	
 	
 	#param (string) storeName
@@ -13,25 +13,25 @@ class Store
 	
 	
 	#getter of IDBObjectStore object  which this object refer to
-	getIDBObjectStore = (mode = "readwrite")->
+	getIDBObjectStore: (mode = "readwrite")->
 		_db.getIDBTransaction(_name, mode).then (tx)->
 			tx.objectStore(_name)
 	
 	
 	#return the key path of the store
-	key: -> @getIDBObjectStore("readonly").keyPath
+	key: -> @getIDBObjectStore("readonly").then (idbStore)->idbStore.keyPath
 	
 	
 	#return the name of the store
-	name: ->  _name
+	name: -> @getIDBObjectStore("readonly").then (idbStore)->idbStore.name
 	
 	
 	#return the list of indexes found in the store
-	indexes: ->  @getIDBObjectStore("readonly").indexNames
+	indexes: -> @getIDBObjectStore("readonly").then (idbStore)->idbStore.indexNames
 	
 	
 	#return boolean indecating if the store key is auto increased
-	isAutoIncrement: -> @getIDBObjectStore("readonly").autoIncrement
+	isAutoIncrement: -> @getIDBObjectStore("readonly").then (idbStore)->idbStore.autoIncrement
 	
 	
 	#action to add a new object to store

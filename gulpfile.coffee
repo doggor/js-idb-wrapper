@@ -23,7 +23,7 @@ sourceFiles = [
 ]
 
 
-gulp.task 'js', ()->
+gulp.task 'release-js', ->
 	gulp.src sourceFiles
 		.pipe sourcemaps.init()
 		.pipe concat "idb.js"
@@ -32,7 +32,7 @@ gulp.task 'js', ()->
 		.pipe gulp.dest "release"
 
 
-gulp.task 'min-js', ['js'], ()->
+gulp.task 'release-min-js', ['release-js'], ->
 	gulp.src "release/idb.js"
 		.pipe minify(
 			ext:
@@ -40,3 +40,12 @@ gulp.task 'min-js', ['js'], ()->
 		)
 		.pipe gulp.dest "release"
 
+
+gulp.task 'release', ['release-min-js']
+
+
+gulp.task 'spec', ->
+	gulp.src "test/spec/**/*.coffee"
+		.pipe coffee()
+		.pipe gulp.dest "test/spec"
+	
