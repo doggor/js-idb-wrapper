@@ -7,7 +7,7 @@ minify = require 'gulp-minify'
 
 sourceFiles = [
 	"src/util/env.coffee"
-	"src/util/newDeferToPromise.coffee"
+	"src/util/DeferAndPromise.coffee"
 	"src/util/indexedDB.coffee"
 	"src/util/IDBTransaction.coffee"
 	"src/util/IDBKeyRange.coffee"

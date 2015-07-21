@@ -1,11 +1,37 @@
 (function() {
-  var Database, DatabaseManager, IDBError, IDBKeyRange, IDBRequest2Q, IDBTransaction, IDBTx2Q, Query, Schema, Store, env, indexedDB, msg, newDefer, toPromise,
+  var Database, DatabaseManager, IDBError, IDBKeyRange, IDBRequest2Q, IDBTransaction, IDBTx2Q, Query, Schema, Store, env, indexedDB, msg, newDefer, newPromise, toPromise,
     extend = function(child, parent) { for (var key in parent) { if (hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; },
     hasProp = {}.hasOwnProperty,
     slice = [].slice,
     indexOf = [].indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; };
 
   env = window || self || global || this;
+
+
+  /*
+  This code will constructs 3 Promise-related functions:
+  
+  1. newDefer()
+     this function will return a new deferred object.
+     A defferred object contains 2 functions:
+     i.  resolve(result)
+         return result value through calling this function.
+     ii. reject(error)
+         return any error through calling this function.
+  
+  2. toPromise(deferred)
+     this function will return the promise object of given deferred object.
+     A promise object contains 2 functions:
+     i.  then(onSuccess, onError = null)
+         set the result handler and, optionally, the error handler of the deferred object.
+     ii. catch(onError)
+         set the error handler of the deferred object.
+  
+  3. newPromise(result = null, error = null)
+     A shortcut function of using both newDefer() and toPromise().
+     It return a promise object that immediately resolve with given result
+     or reject with given error. Thus, either result or error must be given.
+   */
 
   if (typeof env.Promise !== "undefined") {
     newDefer = function() {
@@ -41,6 +67,19 @@
   } else {
     throw new IDBError("Not compatible promise function found.");
   }
+
+  newPromise = function(result, error) {
+    var d;
+    d = newDefer();
+    if (result) {
+      d.resolve(result);
+    } else if (error) {
+      d.reject(error);
+    } else {
+      throw new Error("either result or error must provided to newPromise().");
+    }
+    return toPromise(d);
+  };
 
   indexedDB = env.indexedDB || env.mozIndexedDB || env.webkitIndexedDB || env.msIndexedDB;
 
@@ -224,13 +263,15 @@
   })();
 
   Query = (function() {
-    var _indexName, _order, _range, _store;
+    var _indexName, _order, _range, _store, getIDBIndexIfSet;
 
-    _store = _indexName = _range = _order = null;
+    _store = _indexName = _range = null;
+
+    _order = "next";
 
     function Query(store, indexName, range) {
       _store = store;
-      _indexName = indexName != null ? indexName : store.key();
+      _indexName = indexName;
       _range = range;
     }
 
@@ -238,61 +279,68 @@
       if (direction === -1 || (typeof direction === "string" && direction.match(/desc/))) {
         _order = "prev";
       } else {
-        _order = null;
+        _order = "next";
       }
       return this;
     };
 
     Query.prototype.each = function(func) {
-      var d, index, r;
-      d = newDefer();
-      index = _store.getIDBObjectStore("readonly").index(_indexName);
-      r = index.openCursor(range, _order);
-      r.onsuccess = function(event) {
-        var cursor, err;
-        if (cursor = event.target.result) {
-          try {
-            if (func(cursor.key, cursor.value, event) === false) {
-              return d.resolve(event);
-            } else {
+      return _store.getIDBObjectStore("readonly").then(function(idbStore) {
+        var cursorRequest, d;
+        d = newDefer();
+        cursorRequest = (getIDBIndexIfSet(idbStore)).openCursor(_range, _order);
+        cursorRequest.onsuccess = function(event) {
+          var cursor, err;
+          if (cursor = event.target.result) {
+            try {
+              func(cursor.value, cursor.key);
               return cursor["continue"]();
+            } catch (_error) {
+              err = _error;
+              return d.reject(err);
             }
-          } catch (_error) {
-            err = _error;
-            return d.reject(err);
+          } else {
+            return d.resolve();
           }
-        } else {
-          return d.resolve(event);
-        }
-      };
-      r.onerror = function(event) {
-        return d.reject(event);
-      };
-      return toPromise(d);
+        };
+        return toPromise(d);
+      });
     };
 
     Query.prototype.first = function(func) {
-      var index;
-      index = _store.getIDBObjectStore("readonly").index(_indexName);
-      return IDBRequest2Q(index.get(range)).then(function(event) {
+      return _store.getIDBObjectStore("readonly").then(function(idbStore) {
+        return IDBRequest2Q((getIDBIndexIfSet(idbStore)).get(_range));
+      }).then(function(event) {
         return func(event.target.result);
       });
     };
 
     Query.prototype.list = function(func) {
-      var result;
-      result = [];
-      return this.each(function(value) {
-        return result.push(value);
-      }).then(func(result));
+      var keys, objects;
+      objects = [];
+      keys = [];
+      return this.each(function(object, key) {
+        objects.push(object);
+        return keys.push(key);
+      }).then(function() {
+        return func(objects, keys);
+      });
     };
 
     Query.prototype.count = function(func) {
-      var index;
-      index = _store.getIDBObjectStore("readonly").index(_indexName);
-      return IDBRequest2Q(index.count(_range)).then(function(event) {
+      return _store.getIDBObjectStore("readonly").then(function(idbStore) {
+        return IDBRequest2Q((getIDBIndexIfSet(idbStore)).count(_range));
+      }).then(function(event) {
         return func(event.target.result);
       });
+    };
+
+    getIDBIndexIfSet = function(idbStore) {
+      if (_indexName) {
+        return idbStore.index(_indexName);
+      } else {
+        return idbStore;
+      }
     };
 
     return Query;
@@ -300,7 +348,7 @@
   })();
 
   Store = (function() {
-    var _db, _name, string2Range;
+    var _db, _name, extractStr;
 
     _name = _db = null;
 
@@ -336,7 +384,7 @@
       });
     };
 
-    Store.prototype.isAutoIncrement = function() {
+    Store.prototype.isAutoKey = function() {
       return this.getIDBObjectStore("readonly").then(function(idbStore) {
         return idbStore.autoIncrement;
       });
@@ -371,81 +419,65 @@
     };
 
     Store.prototype.where = function(expression) {
-      var exp, indexName, lower, range, ref, ref1, ref10, ref11, ref12, ref2, ref3, ref4, ref5, ref6, ref7, ref8, ref9, upper;
-      exp = expression.trim().replace(/(\s|\t)+/g, "");
-      switch (false) {
-        case !exp.match(/^.+=.+$/):
-          ref = exp.split("="), indexName = ref[0], range = ref[1];
-          range = IDBKeyRange.only(string2Range(range));
-          break;
-        case !exp.match(/^.+<.+$/):
-          ref1 = exp.split("<"), indexName = ref1[0], range = ref1[1];
-          range = IDBKeyRange.upperBound(string2Range(range, true));
-          break;
-        case !exp.match(/^.+<=.+$/):
-          ref2 = exp.split("<="), indexName = ref2[0], range = ref2[1];
-          range = IDBKeyRange.upperBound(string2Range(range));
-          break;
-        case !exp.match(/^.+>.+$/):
-          ref3 = exp.split(">"), indexName = ref3[0], range = ref3[1];
-          range = IDBKeyRange.lowerBound(string2Range(range, true));
-          break;
-        case !exp.match(/^.+>=.+$/):
-          ref4 = exp.split(">="), indexName = ref4[0], range = ref4[1];
-          range = IDBKeyRange.lowerBound(string2Range(range));
-          break;
-        case !exp.match(/^.+<.+<.+$/):
-          ref5 = exp.split("<"), lower = ref5[0], indexName = ref5[1], upper = ref5[2];
-          range = IDBKeyRange.bound(string2Range(lower, string2Range(upper, true, true)));
-          break;
-        case !exp.match(/^.+<=.+<.+$/):
-          ref6 = exp.split(/<\=?/), lower = ref6[0], indexName = ref6[1], upper = ref6[2];
-          range = IDBKeyRange.bound(string2Range(lower, string2Range(upper, false, true)));
-          break;
-        case !exp.match(/^.+<.+<=.+$/):
-          ref7 = exp.split("<\=?"), lower = ref7[0], indexName = ref7[1], upper = ref7[2];
-          range = IDBKeyRange.bound(string2Range(lower, string2Range(upper, true)));
-          break;
-        case !exp.match(/^.+<=.+<=.+$/):
-          ref8 = exp.split("<="), lower = ref8[0], indexName = ref8[1], upper = ref8[2];
-          range = IDBKeyRange.bound(string2Range(lower, string2Range(upper)));
-          break;
-        case !exp.match(/^.+>.+>.+$/):
-          ref9 = exp.split(">"), upper = ref9[0], indexName = ref9[1], lower = ref9[2];
-          range = IDBKeyRange.bound(string2Range(lower, string2Range(upper, true, true)));
-          break;
-        case !exp.match(/^.+>=.+>.+$/):
-          ref10 = exp.split(/>\=?/), upper = ref10[0], indexName = ref10[1], lower = ref10[2];
-          range = IDBKeyRange.bound(string2Range(lower, string2Range(upper, false, true)));
-          break;
-        case !exp.match(/^.+>.+>=.+$/):
-          ref11 = exp.split(">\=?"), upper = ref11[0], indexName = ref11[1], lower = ref11[2];
-          range = IDBKeyRange.bound(string2Range(lower, string2Range(upper, true)));
-          break;
-        case !exp.match(/^.+>=.+>=.+$/):
-          ref12 = exp.split(">="), upper = ref12[0], indexName = ref12[1], lower = ref12[2];
-          range = IDBKeyRange.bound(string2Range(lower, string2Range(upper)));
-          break;
-        default:
-          throw new IDBError("Unknown statment (" + expression + ").");
+      var indexName, matcher, range, ref;
+      if (typeof expression === "string") {
+        expression = expression.trim();
       }
+      ref = (function() {
+        switch (false) {
+          case !(expression === null || expression === ""):
+            return [null, null];
+          case !(matcher = expression.match(/^('.*'|".*"|[^\s\t]+)[\s\t]*<=[\s\t]*('.*'|".*"|[^\s\t]+)[\s\t]*<=[\s\t]*('.*'|".*"|[^\s\t]+)$/)):
+            return [extractStr(matcher[2]), IDBKeyRange.bound(extractStr(matcher[1]), extractStr(matcher[3]))];
+          case !(matcher = expression.match(/^('.*'|".*"|[^\s\t]+)[\s\t]*<[\s\t]*('.*'|".*"|[^\s\t]+)[\s\t]*<=[\s\t]*('.*'|".*"|[^\s\t]+)$/)):
+            return [extractStr(matcher[2]), IDBKeyRange.bound(extractStr(matcher[1]), extractStr(matcher[3]), true)];
+          case !(matcher = expression.match(/^('.*'|".*"|[^\s\t]+)[\s\t]*<=[\s\t]*('.*'|".*"|[^\s\t]+)[\s\t]*<[\s\t]*('.*'|".*"|[^\s\t]+)$/)):
+            return [extractStr(matcher[2]), IDBKeyRange.bound(extractStr(matcher[1]), extractStr(matcher[3]), false, true)];
+          case !(matcher = expression.match(/^('.*'|".*"|[^\s\t]+)[\s\t]*<[\s\t]*('.*'|".*"|[^\s\t]+)[\s\t]*<[\s\t]*('.*'|".*"|[^\s\t]+)$/)):
+            return [extractStr(matcher[2]), IDBKeyRange.bound(extractStr(matcher[1]), extractStr(matcher[3]), true, true)];
+          case !(matcher = expression.match(/^('.*'|".*"|[^\s\t]+)[\s\t]*>=[\s\t]*('.*'|".*"|[^\s\t]+)[\s\t]*>=[\s\t]*('.*'|".*"|[^\s\t]+)$/)):
+            return [extractStr(matcher[2]), IDBKeyRange.bound(extractStr(matcher[3]), extractStr(matcher[1]))];
+          case !(matcher = expression.match(/^('.*'|".*"|[^\s\t]+)[\s\t]*>[\s\t]*('.*'|".*"|[^\s\t]+)[\s\t]*>=[\s\t]*('.*'|".*"|[^\s\t]+)$/)):
+            return [extractStr(matcher[2]), IDBKeyRange.bound(extractStr(matcher[3]), extractStr(matcher[1]), true)];
+          case !(matcher = expression.match(/^('.*'|".*"|[^\s\t]+)[\s\t]*>=[\s\t]*('.*'|".*"|[^\s\t]+)[\s\t]*>[\s\t]*('.*'|".*"|[^\s\t]+)$/)):
+            return [extractStr(matcher[2]), IDBKeyRange.bound(extractStr(matcher[3]), extractStr(matcher[1]), false, true)];
+          case !(matcher = expression.match(/^('.*'|".*"|[^\s\t]+)[\s\t]*>[\s\t]*('.*'|".*"|[^\s\t]+)[\s\t]*>[\s\t]*('.*'|".*"|[^\s\t]+)$/)):
+            return [extractStr(matcher[2]), IDBKeyRange.bound(extractStr(matcher[3]), extractStr(matcher[1]), true, true)];
+          case !(matcher = expression.match(/^('.*'|".*"|[^\s\t]+)[\s\t]*<=[\s\t]*('.*'|".*"|[^\s\t]+)$/)):
+            return [extractStr(matcher[1]), IDBKeyRange.upperBound(extractStr(matcher[2]))];
+          case !(matcher = expression.match(/^('.*'|".*"|[^\s\t]+)[\s\t]*<[\s\t]*('.*'|".*"|[^\s\t]+)$/)):
+            return [extractStr(matcher[1]), IDBKeyRange.upperBound(extractStr(matcher[2]), true)];
+          case !(matcher = expression.match(/^('.*'|".*"|[^\s\t]+)[\s\t]*>=[\s\t]*('.*'|".*"|[^\s\t]+)$/)):
+            return [extractStr(matcher[1]), IDBKeyRange.lowerBound(extractStr(matcher[2]))];
+          case !(matcher = expression.match(/^('.*'|".*"|[^\s\t]+)[\s\t]*>[\s\t]*('.*'|".*"|[^\s\t]+)$/)):
+            return [extractStr(matcher[1]), IDBKeyRange.lowerBound(extractStr(matcher[2]), true)];
+          case !(matcher = expression.match(/^('.*'|".*"|[^\s\t]+)[\s\t]*=[\s\t]*('.*'|".*"|[^\s\t]+)$/)):
+            return [extractStr(matcher[1]), IDBKeyRange.only(extractStr(matcher[2]))];
+          default:
+            throw new IDBError("Unknown statment (" + expression + ").");
+        }
+      })(), indexName = ref[0], range = ref[1];
       return new Query(this, indexName, range);
     };
 
-    string2Range = function(string) {
+    Store.prototype.all = function() {
+      return this.where(null);
+    };
+
+    extractStr = function(string) {
       var i, len, ref, results, str;
       if (string.match(/^\[.*\]$/)) {
-        ref = string.slice(1, -1).match(/(\[.+\]|'.+'|".+"|[^,]+)/g);
+        ref = string.slice(1, -1).match(/(\[.+\]|'.*'|".*"|[^,]+)/g);
         results = [];
         for (i = 0, len = ref.length; i < len; i++) {
           str = ref[i];
-          results.push(string2Range(str));
+          results.push(extractStr(str.trim()));
         }
         return results;
       } else if (!isNaN(string)) {
         return +string;
       } else {
-        if (string.match(/^('|").+('|")$/)) {
+        if (string.match(/^('.*'|".*")$/)) {
           return string.slice(1, -1);
         } else {
           return string;
@@ -467,12 +499,16 @@
     }
 
     Database.prototype.name = function() {
-      return _name;
+      return this.getIDBDatabase().then(function(idb) {
+        return idb.name;
+      });
     };
 
     Database.prototype.version = function(versionNumber, dbDefination) {
       if (!versionNumber) {
-        return _version;
+        return this.getIDBDatabase().then(function(idb) {
+          return idb.version;
+        });
       } else if (_version === null || _version <= versionNumber) {
         _schema = new Schema(dbDefination);
         return _version = versionNumber;
@@ -484,11 +520,9 @@
     };
 
     Database.prototype.getIDBDatabase = function() {
-      var d, r;
+      var r;
       if (_idbDatabase != null) {
-        d = newDefer();
-        d.resolve(_idbDatabase);
-        return toPromise(d);
+        return newPromise(_idbDatabase);
       } else {
         r = indexedDB.open(_name, _version);
         r.onblocked = _onVersionConflictHandler;
@@ -502,11 +536,8 @@
     };
 
     Database.prototype.getIDBTransaction = function(storeNames, mode) {
-      var d;
       if (_batchTx) {
-        d = newDefer();
-        d.resolve(_batchTx);
-        return toPromise(d);
+        return newPromise(_batchTx);
       } else {
         return this.getIDBDatabase().then(function(idb) {
           return idb.transaction(storeNames, mode);

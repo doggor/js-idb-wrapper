@@ -30,8 +30,8 @@ class Store
 	indexes: -> @getIDBObjectStore("readonly").then (idbStore)->idbStore.indexNames
 	
 	
-	#return boolean indecating if the store key is auto increased
-	isAutoIncrement: -> @getIDBObjectStore("readonly").then (idbStore)->idbStore.autoIncrement
+	#return boolean indecating if the store key is auto increment
+	isAutoKey: -> @getIDBObjectStore("readonly").then (idbStore)->idbStore.autoIncrement
 	
 	
 	#action to add a new object to store
@@ -58,69 +58,94 @@ class Store
 			IDBRequest2Q( idbStore.clear() )
 	
 	
-	#return a new Query object that applying with given expression
+	#return a new Query object that applying given expression
 	where: (expression)->
-		exp = expression
-			.trim()
-			.replace /(\s|\t)+/g  , ""
+		expression = expression.trim() if typeof expression is "string"
 		
-		switch
-			when exp.match /^.+=.+$/
-				[indexName, range] = exp.split("=")
-				range = IDBKeyRange.only(string2Range range)
-			when exp.match /^.+<.+$/
-				[indexName, range] = exp.split("<")
-				range = IDBKeyRange.upperBound(string2Range range, true)
-			when exp.match /^.+<=.+$/
-				[indexName, range] = exp.split("<=")
-				range = IDBKeyRange.upperBound(string2Range range)
-			when exp.match /^.+>.+$/
-				[indexName, range] = exp.split(">")
-				range = IDBKeyRange.lowerBound(string2Range range, true)
-			when exp.match /^.+>=.+$/
-				[indexName, range] = exp.split(">=")
-				range = IDBKeyRange.lowerBound(string2Range range)
-			when exp.match /^.+<.+<.+$/
-				[lower, indexName, upper] = exp.split("<")
-				range = IDBKeyRange.bound(string2Range lower, string2Range upper, true, true)
-			when exp.match /^.+<=.+<.+$/
-				[lower, indexName, upper] = exp.split(/<\=?/)
-				range = IDBKeyRange.bound(string2Range lower, string2Range upper, false, true)
-			when exp.match /^.+<.+<=.+$/
-				[lower, indexName, upper] = exp.split("<\=?")
-				range = IDBKeyRange.bound(string2Range lower, string2Range upper, true)
-			when exp.match /^.+<=.+<=.+$/
-				[lower, indexName, upper] = exp.split("<=")
-				range = IDBKeyRange.bound(string2Range lower, string2Range upper)
-			when exp.match /^.+>.+>.+$/
-				[upper, indexName, lower] = exp.split(">")
-				range = IDBKeyRange.bound(string2Range lower, string2Range upper, true, true)
-			when exp.match /^.+>=.+>.+$/
-				[upper, indexName, lower] = exp.split(/>\=?/)
-				range = IDBKeyRange.bound(string2Range lower, string2Range upper, false, true)
-			when exp.match /^.+>.+>=.+$/
-				[upper, indexName, lower] = exp.split(">\=?")
-				range = IDBKeyRange.bound(string2Range lower, string2Range upper, true)
-			when exp.match /^.+>=.+>=.+$/
-				[upper, indexName, lower] = exp.split(">=")
-				range = IDBKeyRange.bound(string2Range lower, string2Range upper)
+		[indexName , range] = switch
+			
+			when expression is null or expression is ""
+				[null, null]
+			
+			# x <= index <= y
+			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*<=[\s\t]*('.*'|".*"|[^\s\t]+)[\s\t]*<=[\s\t]*('.*'|".*"|[^\s\t]+)$/
+				[ (extractStr matcher[2]) , IDBKeyRange.bound (extractStr matcher[1]), (extractStr matcher[3]) ]
+			
+			# x < index <= y
+			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*<[\s\t]*('.*'|".*"|[^\s\t]+)[\s\t]*<=[\s\t]*('.*'|".*"|[^\s\t]+)$/
+				[ (extractStr matcher[2]) , IDBKeyRange.bound (extractStr matcher[1]), (extractStr matcher[3]), true ]
+			
+			# x <= index < y
+			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*<=[\s\t]*('.*'|".*"|[^\s\t]+)[\s\t]*<[\s\t]*('.*'|".*"|[^\s\t]+)$/
+				[ (extractStr matcher[2]) , IDBKeyRange.bound (extractStr matcher[1]), (extractStr matcher[3]), false, true ]
+			
+			# x < index < y
+			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*<[\s\t]*('.*'|".*"|[^\s\t]+)[\s\t]*<[\s\t]*('.*'|".*"|[^\s\t]+)$/
+				[ (extractStr matcher[2]) , IDBKeyRange.bound (extractStr matcher[1]), (extractStr matcher[3]), true, true ]
+			
+			# x >= index >= y
+			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*>=[\s\t]*('.*'|".*"|[^\s\t]+)[\s\t]*>=[\s\t]*('.*'|".*"|[^\s\t]+)$/
+				[ (extractStr matcher[2]) , IDBKeyRange.bound (extractStr matcher[3]), (extractStr matcher[1]) ]
+			
+			# x > index >= y
+			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*>[\s\t]*('.*'|".*"|[^\s\t]+)[\s\t]*>=[\s\t]*('.*'|".*"|[^\s\t]+)$/
+				[ (extractStr matcher[2]) , IDBKeyRange.bound (extractStr matcher[3]), (extractStr matcher[1]), true ]
+			
+			# x >= index > y
+			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*>=[\s\t]*('.*'|".*"|[^\s\t]+)[\s\t]*>[\s\t]*('.*'|".*"|[^\s\t]+)$/
+				[ (extractStr matcher[2]) , IDBKeyRange.bound (extractStr matcher[3]), (extractStr matcher[1]), false, true ]
+			
+			# x > index > y
+			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*>[\s\t]*('.*'|".*"|[^\s\t]+)[\s\t]*>[\s\t]*('.*'|".*"|[^\s\t]+)$/
+				[ (extractStr matcher[2]) , IDBKeyRange.bound (extractStr matcher[3]), (extractStr matcher[1]), true, true ]
+			
+			# index <= x
+			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*<=[\s\t]*('.*'|".*"|[^\s\t]+)$/
+				[ (extractStr matcher[1]) , IDBKeyRange.upperBound (extractStr matcher[2]) ]
+			
+			# index < x
+			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*<[\s\t]*('.*'|".*"|[^\s\t]+)$/
+				[ (extractStr matcher[1]) , IDBKeyRange.upperBound (extractStr matcher[2]), true ]
+			
+			# index >= x
+			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*>=[\s\t]*('.*'|".*"|[^\s\t]+)$/
+				[ (extractStr matcher[1]) , IDBKeyRange.lowerBound (extractStr matcher[2]) ]
+			
+			# index > x
+			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*>[\s\t]*('.*'|".*"|[^\s\t]+)$/
+				[ (extractStr matcher[1]) , IDBKeyRange.lowerBound (extractStr matcher[2]), true ]
+			
+			# index = x
+			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*=[\s\t]*('.*'|".*"|[^\s\t]+)$/
+				[ (extractStr matcher[1]) , IDBKeyRange.only (extractStr matcher[2]) ]
+			
+			#index
+			#when matcher = expression.match /^('.*'|".*"|[^\s\t]+)$/
+			#	[ (extractStr matcher[1]) , null ]
+			
 			else
 				throw new IDBError("Unknown statment (#{expression}).")
-			
-		new Query(@, indexName, range)
+		
+		new Query(@, (indexName), range)
+	
+	
+	#a shortcut of calling @where in which no any limitation apply
+	all: ->
+		@where(null)
 	
 	
 	#extract range string
 	#examples:
 	#  "[a,[b,c],4]" -> ["a",["b","c"],4]
-	#  "['a,b',[c,'[d,e,f]'] -> ["a,b", ["c","[d,e,f]"]
-	string2Range = (string)->
+	#  "['a,b',[c,'[d,e,f]']" -> ["a,b", ["c","[d,e,f]"]
+	#  "'a'" -> "a"
+	extractStr = (string)->
 		if string.match /^\[.*\]$/
-			(string2Range(str) for str in string[1...-1].match /(\[.+\]|'.+'|".+"|[^,]+)/g )
+			( extractStr str.trim() for str in string[1...-1].match /(\[.+\]|'.*'|".*"|[^,]+)/g )
 		else if not isNaN(string)
 			+string
-		else 
-			if string.match /^('|").+('|")$/
+		else
+			if string.match /^('.*'|".*")$/
 				string[1...-1]
 			else
 				string

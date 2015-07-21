@@ -18,14 +18,17 @@ class Database
 	
 
 	#return the database name
-	name: ()-> _name
+	name: ()->
+		@getIDBDatabase().then (idb)->
+			idb.name
 	
 	
 	#if not parameters given, return the database's version
 	#if paramters given, define the database with given version
 	version: (versionNumber, dbDefination)->
 		if not versionNumber
-			_version
+			@getIDBDatabase().then (idb)->
+				idb.version
 		
 		#define the database only if the version is larger
 		else if _version is null or _version <= versionNumber
@@ -41,9 +44,7 @@ class Database
 	#getter of IDBDatabase object which this object refer to
 	getIDBDatabase: ()->
 		if _idbDatabase?
-			d = newDefer()
-			d.resolve(_idbDatabase)
-			toPromise d
+			newPromise _idbDatabase
 		else
 			r = indexedDB.open(_name, _version)
 			r.onblocked = _onVersionConflictHandler
@@ -57,9 +58,7 @@ class Database
 	#or return a new IDBTransaction object
 	getIDBTransaction: (storeNames, mode)->
 		if _batchTx
-			d = newDefer()
-			d.resolve(_batchTx)
-			toPromise d
+			newPromise _batchTx
 		else
 			@getIDBDatabase().then (idb)->
 				idb.transaction(storeNames, mode)
