@@ -126,8 +126,6 @@
   Schema = (function() {
     var index2KeyPath, string2KeyPath;
 
-    Schema.prototype.stores = {};
-
     Schema.Store = (function() {
       function Store(name1) {
         this.name = name1;
@@ -158,10 +156,16 @@
     })();
 
     function Schema(dbDefinition) {
-      var dfn, i, indexName, isMultiEntry, isUnique, keyPath, len, store, storeDfn, storeName;
+      this.stores = {};
+      this.applyDefinition(dbDefinition);
+    }
+
+    Schema.prototype.applyDefinition = function(dbDefinition) {
+      var dfn, i, indexName, isMultiEntry, isUnique, keyPath, len, results1, store, storeDfn, storeName;
       if (typeof dbDefinition !== "object") {
         throw new IDBError("The database definition must be JSON.");
       }
+      results1 = [];
       for (storeName in dbDefinition) {
         storeDfn = dbDefinition[storeName];
         if (typeof storeName !== "string") {
@@ -213,29 +217,30 @@
               }
             }
           }
-          this.stores[storeName] = store;
+          results1.push(this.stores[storeName] = store);
         }
       }
-    }
+      return results1;
+    };
 
     string2KeyPath = function(string) {
-      var i, j, keyPath, len, len1, ref, ref1, results, results1;
+      var i, j, keyPath, len, len1, ref, ref1, results1, results2;
       if (string.indexOf(",") > -1) {
         ref = string.split(",");
-        results = [];
+        results1 = [];
         for (i = 0, len = ref.length; i < len; i++) {
           keyPath = ref[i];
-          results.push(string2KeyPath(keyPath));
-        }
-        return results;
-      } else if (string.indexOf("+") > -1) {
-        ref1 = string.split("+");
-        results1 = [];
-        for (j = 0, len1 = ref1.length; j < len1; j++) {
-          keyPath = ref1[j];
           results1.push(string2KeyPath(keyPath));
         }
         return results1;
+      } else if (string.indexOf("+") > -1) {
+        ref1 = string.split("+");
+        results2 = [];
+        for (j = 0, len1 = ref1.length; j < len1; j++) {
+          keyPath = ref1[j];
+          results2.push(string2KeyPath(keyPath));
+        }
+        return results2;
       } else {
         if (string.indexOf(".") > -1) {
           string = string.replace(".", ",");
@@ -263,55 +268,110 @@
   })();
 
   Query = (function() {
-    var _indexName, _order, _range, _store, getIDBIndexIfSet;
-
-    _store = _indexName = _range = null;
-
-    _order = "next";
-
     function Query(store, indexName, range) {
-      _store = store;
-      _indexName = indexName;
-      _range = range;
+      this._store = store;
+      this._indexName = indexName;
+      this._range = range;
+      this._limitTo = null;
+      this._limitFrom = 0;
+      this._order = "next";
     }
 
-    Query.prototype.order = function(direction) {
-      if (direction === -1 || (typeof direction === "string" && direction.match(/desc/))) {
-        _order = "prev";
+    Query.prototype.getIDBIndexIfSet = function(idbStore) {
+      var err, idbIndex;
+      if (this._indexName === "remark") {
+        try {
+          idbIndex = idbStore.index(this._indexName);
+          console.log(idbIndex);
+          return idbIndex;
+        } catch (_error) {
+          err = _error;
+          console.error(err);
+          throw err;
+        }
       } else {
-        _order = "next";
+        if (this._indexName) {
+          return idbStore.index(this._indexName);
+        } else {
+          return idbStore;
+        }
       }
+    };
+
+    Query.prototype.order = function(direction) {
+      this._order = direction === -1 || (typeof direction === "string" && direction.match(/desc/i)) ? "prev" : "next";
+      return this;
+    };
+
+    Query.prototype.limit = function() {
+      var args, from, length, ref;
+      args = 1 <= arguments.length ? slice.call(arguments, 0) : [];
+      ref = (function() {
+        switch (args.length) {
+          case 1:
+            length = args[0];
+            if (typeof length !== "number" || length < 1) {
+              throw new IDBError("length must be > 0 for Query.limit()");
+            }
+            return [0, length - 1];
+          case 2:
+            from = args[0];
+            length = args[1];
+            if (typeof from !== "number" || from < 0) {
+              throw new IDBError("starting position must be > -1 for Query.limit()");
+            }
+            if (typeof length !== "number" || length < 1) {
+              throw new IDBError("length must be > 0 for Query.limit()");
+            }
+            return [from, from + length - 1];
+          default:
+            throw new IDBError("wrong usage of Query.limit()");
+        }
+      })(), this._limitFrom = ref[0], this._limitTo = ref[1];
       return this;
     };
 
     Query.prototype.each = function(func) {
-      return _store.getIDBObjectStore("readonly").then(function(idbStore) {
-        var cursorRequest, d;
-        d = newDefer();
-        cursorRequest = (getIDBIndexIfSet(idbStore)).openCursor(_range, _order);
-        cursorRequest.onsuccess = function(event) {
-          var cursor, err;
-          if (cursor = event.target.result) {
-            try {
-              func(cursor.value, cursor.key);
-              return cursor["continue"]();
-            } catch (_error) {
-              err = _error;
-              return d.reject(err);
+      return this._store.getIDBObjectStore("readonly").then((function(_this) {
+        return function(idbStore) {
+          var cursorPosition, d, results;
+          d = newDefer();
+          cursorPosition = 0;
+          results = [];
+          _this.getIDBIndexIfSet(idbStore).openCursor(_this._range, _this._order).onsuccess = function(event) {
+            var cursor, err, result;
+            if (cursor = event.target.result) {
+              if (cursorPosition < _this._limitFrom) {
+                return cursor.advance(cursorPosition = _this._limitFrom);
+              } else if (_this._limitTo !== null && cursorPosition > _this._limitTo) {
+                return d.resolve(results);
+              } else {
+                try {
+                  result = func(cursor.value, cursor.key);
+                  if (result !== void 0) {
+                    results.push(result);
+                  }
+                  cursorPosition++;
+                  return cursor["continue"]();
+                } catch (_error) {
+                  err = _error;
+                  return d.reject(err);
+                }
+              }
+            } else {
+              return d.resolve(results);
             }
-          } else {
-            return d.resolve();
-          }
+          };
+          return toPromise(d);
         };
-        return toPromise(d);
-      });
+      })(this));
     };
 
     Query.prototype.first = function(func) {
-      return _store.getIDBObjectStore("readonly").then(function(idbStore) {
-        return IDBRequest2Q((getIDBIndexIfSet(idbStore)).get(_range));
-      }).then(function(event) {
-        return func(event.target.result);
+      return this.limit(1).each(function(object, key) {
+        return [object, key];
+      }).then(function(data) {
+        return func(data[0][0], data[0][1]);
       });
     };
 
@@ -328,19 +388,13 @@
     };
 
     Query.prototype.count = function(func) {
-      return _store.getIDBObjectStore("readonly").then(function(idbStore) {
-        return IDBRequest2Q((getIDBIndexIfSet(idbStore)).count(_range));
-      }).then(function(event) {
+      return this._store.getIDBObjectStore("readonly").then((function(_this) {
+        return function(idbStore) {
+          return IDBRequest2Q(_this.getIDBIndexIfSet(idbStore).count(_this._range));
+        };
+      })(this)).then(function(event) {
         return func(event.target.result);
       });
-    };
-
-    getIDBIndexIfSet = function(idbStore) {
-      if (_indexName) {
-        return idbStore.index(_indexName);
-      } else {
-        return idbStore;
-      }
     };
 
     return Query;
@@ -348,22 +402,22 @@
   })();
 
   Store = (function() {
-    var _db, _name, extractStr;
-
-    _name = _db = null;
+    var extractStr;
 
     function Store(storeName, db) {
-      _name = storeName;
-      _db = db;
+      this._name = storeName;
+      this._db = db;
     }
 
     Store.prototype.getIDBObjectStore = function(mode) {
       if (mode == null) {
         mode = "readwrite";
       }
-      return _db.getIDBTransaction(_name, mode).then(function(tx) {
-        return tx.objectStore(_name);
-      });
+      return this._db.getIDBTransaction(this._name, mode).then((function(_this) {
+        return function(tx) {
+          return tx.objectStore(_this._name);
+        };
+      })(this));
     };
 
     Store.prototype.key = function() {
@@ -453,6 +507,8 @@
             return [extractStr(matcher[1]), IDBKeyRange.lowerBound(extractStr(matcher[2]), true)];
           case !(matcher = expression.match(/^('.*'|".*"|[^\s\t]+)[\s\t]*=[\s\t]*('.*'|".*"|[^\s\t]+)$/)):
             return [extractStr(matcher[1]), IDBKeyRange.only(extractStr(matcher[2]))];
+          case !(matcher = expression.match(/^('.*'|".*"|[^\s\t]+)$/)):
+            return [extractStr(matcher[1]), null];
           default:
             throw new IDBError("Unknown statment (" + expression + ").");
         }
@@ -465,15 +521,15 @@
     };
 
     extractStr = function(string) {
-      var i, len, ref, results, str;
+      var i, len, ref, results1, str;
       if (string.match(/^\[.*\]$/)) {
         ref = string.slice(1, -1).match(/(\[.+\]|'.*'|".*"|[^,]+)/g);
-        results = [];
+        results1 = [];
         for (i = 0, len = ref.length; i < len; i++) {
           str = ref[i];
-          results.push(extractStr(str.trim()));
+          results1.push(extractStr(str.trim()));
         }
-        return results;
+        return results1;
       } else if (!isNaN(string)) {
         return +string;
       } else {
@@ -490,12 +546,13 @@
   })();
 
   Database = (function() {
-    var _batchTx, _idbDatabase, _name, _onVersionConflictHandler, _schema, _version, doUpgrade;
-
-    _name = _version = _schema = _onVersionConflictHandler = _idbDatabase = _batchTx = null;
-
     function Database(dbName) {
-      _name = dbName;
+      this._name = dbName;
+      this._version = null;
+      this._dbDefinition = null;
+      this._onVersionConflictHandler = null;
+      this._idbDatabase = null;
+      this._batchTx = null;
     }
 
     Database.prototype.name = function() {
@@ -509,35 +566,40 @@
         return this.getIDBDatabase().then(function(idb) {
           return idb.version;
         });
-      } else if (_version === null || _version <= versionNumber) {
-        _schema = new Schema(dbDefination);
-        return _version = versionNumber;
+      } else if (this._version === null || this._version <= versionNumber) {
+        this._dbDefinition = dbDefination;
+        this._version = versionNumber;
+        return this;
       }
     };
 
     Database.prototype.onVersionConflict = function(handler) {
-      return _onVersionConflictHandler = handler;
+      return this._onVersionConflictHandler = handler;
     };
 
     Database.prototype.getIDBDatabase = function() {
       var r;
-      if (_idbDatabase != null) {
-        return newPromise(_idbDatabase);
+      if (this._idbDatabase != null) {
+        return newPromise(this._idbDatabase);
       } else {
-        r = indexedDB.open(_name, _version);
-        r.onblocked = _onVersionConflictHandler;
-        r.onupgradeneeded = function(event) {
-          return doUpgrade(event.target.result);
-        };
-        return IDBRequest2Q(r).then(function(event) {
-          return _idbDatabase = event.target.result;
-        });
+        r = indexedDB.open(this._name, this._version);
+        r.onblocked = this._onVersionConflictHandler;
+        r.onupgradeneeded = (function(_this) {
+          return function(event) {
+            return _this.doUpgrade(event.target.result);
+          };
+        })(this);
+        return IDBRequest2Q(r).then((function(_this) {
+          return function(event) {
+            return _this._idbDatabase = event.target.result;
+          };
+        })(this));
       }
     };
 
     Database.prototype.getIDBTransaction = function(storeNames, mode) {
-      if (_batchTx) {
-        return newPromise(_batchTx);
+      if (this._batchTx) {
+        return newPromise(this._batchTx);
       } else {
         return this.getIDBDatabase().then(function(idb) {
           return idb.transaction(storeNames, mode);
@@ -549,62 +611,64 @@
       return new Store(storeName, this);
     };
 
+    Database.prototype.close = function() {
+      if (this._idbDatabase) {
+        this._idbDatabase.close();
+        this._idbDatabase = null;
+      }
+    };
+
     Database.prototype.remove = function() {
-      return IDBRequest2Q(indexDB.deleteDatabase(_name)).then(function() {
-        return _name = _version = _schema = _onVersionConflictHandler = _idbDatabase = _batchTx = null;
-      });
+      return IDBRequest2Q(indexDB.deleteDatabase(_name)).then((function(_this) {
+        return function() {
+          return _this._name = _this._version = _this._dbDefinition = _this._onVersionConflictHandler = _this._idbDatabase = _this._batchTx = null;
+        };
+      })(this));
     };
 
     Database.prototype.batch = function() {
-      var batchFunc, storeNames;
+      var p, storeNames;
       storeNames = 1 <= arguments.length ? slice.call(arguments, 0) : [];
-      _batchTx = null;
-      batchFunc = null;
-      this.getIDBTransaction(storeNames, "readonly").then(function(tx) {
-        _batchTx = tx;
-        if (batchFunc !== null) {
-          return batchFunc();
-        }
-      });
-      return {
-        run: (function(_this) {
-          return function(func) {
-            batchFunc = function() {
-              try {
-                return func(_this);
-              } finally {
-                batchFunc = null;
-                _batchTx = null;
-              }
-            };
-            if (_batchTx !== null) {
-              batchFunc();
+      this._batchTx = null;
+      p = this.getIDBTransaction(storeNames, "readwrite").then((function(_this) {
+        return function(tx) {
+          return _this._batchTx = tx;
+        };
+      })(this));
+      p.run = (function(_this) {
+        return function(batchFunc) {
+          return p.then(function() {
+            try {
+              return batchFunc(this);
+            } finally {
+              this._batchTx = null;
             }
-            return IDBTx2Q(_batchTx);
-          };
-        })(this)
-      };
+          });
+        };
+      })(this);
+      return p;
     };
 
-    doUpgrade = function(idb) {
-      var action, actions, currentStoreNames, fn1, fn2, i, indexName, indexSchema, j, len, len1, ref, ref1, results, store, storeName, storeSchema, tx;
-      if (_schema === null) {
-        throw new IDBError("Schema not found.");
+    Database.prototype.doUpgrade = function(idb) {
+      var _schema, action, actions, currentStoreNames, fn1, fn2, i, indexName, indexSchema, j, len, len1, ref, ref1, results1, store, storeName, storeSchema, tx;
+      if (this._dbDefinition === null) {
+        throw new IDBError("DB definition not found.");
       }
+      _schema = new Schema(this._dbDefinition);
       actions = [];
       currentStoreNames = idb.objectStoreNames;
       if (currentStoreNames.length > 0) {
         tx = idb.transaction(currentStoreNames, "readwrite");
         fn1 = function(storeName) {
-          var currentIndexNames, indexName, j, len1, results, store, storeSchema;
+          var currentIndexNames, indexName, j, len1, results1, store, storeSchema;
           if (_schema.stores.hasOwnProperty(storeName)) {
             store = tx.objectStore(storeName);
             currentIndexNames = store.indexNames;
             storeSchema = _schema.stores[storeName];
-            results = [];
+            results1 = [];
             for (j = 0, len1 = currentIndexNames.length; j < len1; j++) {
               indexName = currentIndexNames[j];
-              results.push((function(indexName) {
+              results1.push((function(indexName) {
                 var index, indexSchema;
                 if (storeSchema.indexes.hasOwnProperty(indexName)) {
                   index = store.index(indexName);
@@ -627,7 +691,7 @@
                 }
               })(indexName));
             }
-            return results;
+            return results1;
           } else {
             return actions.push(function() {
               return idb.deleteObjectStore(storeName);
@@ -657,12 +721,12 @@
           fn2(store, indexName, indexSchema);
         }
       }
-      results = [];
+      results1 = [];
       for (j = 0, len1 = actions.length; j < len1; j++) {
         action = actions[j];
-        results.push(action());
+        results1.push(action());
       }
-      return results;
+      return results1;
     };
 
     return Database;

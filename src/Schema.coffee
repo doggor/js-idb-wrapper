@@ -1,10 +1,6 @@
 class Schema
 	
 	
-	#hold @Store objects in {<store name> : <@Store object>} pairs
-	stores: {}
-	
-	
 	#inner class defining object store structure
 	class @Store
 		
@@ -34,8 +30,18 @@ class Schema
 	#end of class @Store
 	
 	
+	
+	
 	#param (Object) dbDefinition
 	constructor: (dbDefinition)->
+		@stores = {}  #hold @Store objects in {<store name> : <@Store object>} pairs
+		
+		@applyDefinition dbDefinition
+	
+	
+	
+	#param (Object) dbDefinition
+	applyDefinition: (dbDefinition)->
 		
 		if typeof dbDefinition isnt "object"
 			throw new IDBError "The database definition must be JSON."
@@ -112,6 +118,8 @@ class Schema
 				@stores[storeName] = store
 	
 	
+	
+	
 	#extract key path from string
 	#examples:
 	#  "name.first,name.last,nick" -> [["name","first"],["name","last"],"nick"]
@@ -131,6 +139,8 @@ class Schema
 				throw new IDBError "Fail to parse definition(#{string}): quotation mark not in pairs."
 			else
 				string
+	
+	
 	
 	
 	#extract index name to key path

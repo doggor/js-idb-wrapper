@@ -1,125 +1,136 @@
 class Database
 	
-	_name =  #the database name
-	
-	_version =  #the database version
-	
-	_schema =  #the Schema object for this database
-	
-	_onVersionConflictHandler =  #IDBOpenDBRequest.onblocked handler
-	
-	_idbDatabase =  #the IDBDatabase object this object belong to
-	
-	_batchTx = null  #IDBTransaction object that used for batch process
-	
 	
 	constructor: (dbName)->
-		_name = dbName
+		@_name = dbName                     #the database name
+		@_version = null                    #the database version
+		@_dbDefinition = null               #the Schema object for this database
+		@_onVersionConflictHandler = null   #IDBOpenDBRequest.onblocked handler
+		@_idbDatabase = null                #the IDBDatabase object this object belong to
+		@_batchTx = null                    #IDBTransaction object that used for batch process
 	
-
+	
+	
+	
 	#return the database name
 	name: ()->
-		@getIDBDatabase().then (idb)->
-			idb.name
+		@getIDBDatabase().then (idb)->idb.name
+	
+	
 	
 	
 	#if not parameters given, return the database's version
 	#if paramters given, define the database with given version
 	version: (versionNumber, dbDefination)->
+		
 		if not versionNumber
-			@getIDBDatabase().then (idb)->
-				idb.version
+			@getIDBDatabase().then (idb)->idb.version
 		
 		#define the database only if the version is larger
-		else if _version is null or _version <= versionNumber
-			_schema = new Schema(dbDefination)
-			_version = versionNumber
+		else if @_version is null or @_version <= versionNumber
+			@_dbDefinition = dbDefination
+			@_version = versionNumber
+			@  #return this for chaining
+	
+	
 	
 	
 	#setter of IDBOpenDBRequest.onblocked handler
 	onVersionConflict: (handler)->
-		_onVersionConflictHandler = handler
+		@_onVersionConflictHandler = handler
+	
+	
 	
 	
 	#getter of IDBDatabase object which this object refer to
 	getIDBDatabase: ()->
-		if _idbDatabase?
-			newPromise _idbDatabase
+		if @_idbDatabase?
+			newPromise @_idbDatabase
 		else
-			r = indexedDB.open(_name, _version)
-			r.onblocked = _onVersionConflictHandler
-			r.onupgradeneeded = (event)-> doUpgrade(event.target.result)
-			IDBRequest2Q( r ).then (event)->
-				_idbDatabase = event.target.result
+			r = indexedDB.open(@_name, @_version)
+			r.onblocked = @_onVersionConflictHandler
+			r.onupgradeneeded = (event)=>@doUpgrade(event.target.result)
+			IDBRequest2Q( r ).then (event)=>
+				@_idbDatabase = event.target.result
+	
+	
 	
 	
 	#getter of IDBTransaction objects of this object
 	#return _batchTx if set (by calling @batch)
 	#or return a new IDBTransaction object
 	getIDBTransaction: (storeNames, mode)->
-		if _batchTx
-			newPromise _batchTx
+		if @_batchTx
+			newPromise @_batchTx
 		else
 			@getIDBDatabase().then (idb)->
 				idb.transaction(storeNames, mode)
-		
+	
+	
+	
 	
 	store: (storeName)->
 		new Store(storeName, @)
 	
 	
+	
+	
+	#try close the database if opened
+	#it will be closed after all transactions completed
+	#nothing return
+	close: ()->
+		if @_idbDatabase
+			@_idbDatabase.close()
+			@_idbDatabase = null
+		return
+	
+	
+	
+	
 	#remove the database form disk
 	#this object will no longer usable
 	remove: ->
-		IDBRequest2Q(indexDB.deleteDatabase(_name)).then ()->
+		IDBRequest2Q(indexDB.deleteDatabase(_name)).then ()=>
 			#clear
-			_name = 
-			_version = 
-			_schema = 
-			_onVersionConflictHandler = 
-			_idbDatabase = 
-			_batchTx = null
+			@_name = 
+			@_version = 
+			@_dbDefinition = 
+			@_onVersionConflictHandler = 
+			@_idbDatabase = 
+			@_batchTx = null
+	
+	
 	
 	
 	#create a transaction for upcoming actions
 	#usage: db.batch("store1", "store2", ...).run ()->...
 	batch: (storeNames...)->
-		#first, clear any previous batch transaction
-		_batchTx = null
 		
-		#function to run when _batchTx ready
-		batchFunc = null
+		#first, clear any previous batch transaction
+		@_batchTx = null
 		
 		#get and set a new transaction to _batchTx
-		@getIDBTransaction(storeNames, "readonly").then (tx)->
-			_batchTx = tx
-			
-			#run if everything ready
-			batchFunc() if batchFunc isnt null
+		p = @getIDBTransaction(storeNames, "readwrite").then (tx)=>
+			@_batchTx = tx
 		
-		#return a runnable for setting batch function
-		{} =
-			run: (func)=>
-				#construct the batchFunc
-				batchFunc = ()=>
-					try
-						func(@)
-					finally
-						#clear after run
-						batchFunc = null  
-						_batchTx = null
-				
-				#run if everything ready
-				batchFunc() if _batchTx isnt null
-				
-				#return promise of the transaction
-				IDBTx2Q( _batchTx )
+		#return runnable object that extends the transaction promise
+		p.run = (batchFunc)=>
+			p.then ->
+				try
+					batchFunc(@)
+				finally
+					@_batchTx = null
+		p
 	
 	
-	doUpgrade = (idb)->
+	
+	
+	doUpgrade: (idb)->
 		
-		if _schema is null
-			throw new IDBError "Schema not found."
+		if @_dbDefinition is null
+			throw new IDBError "DB definition not found."
+		
+		_schema = new Schema(@_dbDefinition)
 		
 		#list of functions that make change to the db
 		actions = []
@@ -176,4 +187,4 @@ class Database
 		
 		#seems no any error, perform upgrade now
 		action() for action in actions
-		
+	
