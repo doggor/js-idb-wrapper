@@ -77,40 +77,35 @@ class Schema
 						#remove unnecessary spaces inside the definition
 						dfn = dfn
 							.trim()
-							.replace /(\s|\t)+/g  , " "
+							.replace /[\s\t]+/g   , " "
 							.replace /\s?\(\s?/g  , "("
 							.replace /\s?\)\s?/g  , ")"
-							.replace /\s?,\s?/g   , ","
-							.replace /\s?\+\s?/g  , "+"
 							.replace /\s?\.\s?/g  , "."
 						
 						if dfn.match /^KEY/
 							if store.option.keyPath?
 								throw new IDBError("Store key duplicated.")
 							
-							if dfn.match /^KEY\(.+\)/
-								store.option.keyPath = string2KeyPath dfn[4...dfn.indexOf ")"]
+							if matcher = dfn.match /^KEY(\(.+\)).*$/
+								store.option.keyPath = extract2KeyPath matcher[1]
 							
 							if dfn.match /AUTO$/
 								store.option.autoIncrement = true
 						else
-							indexName = dfn.replace(/\(.+\)/, "").replace(/( UNIQUE)$/, "")
+							indexName = dfn.replace(/[\(\s].+/, "")
 							
 							if not indexName.match(/(\w|\.)+/)
 								throw new IDBError "Invalid index name(#{indexName})."
 							
-							isUnique = if dfn.match /( UNIQUE)$/ then true else false
+							isUnique = if dfn.match /[\s\)]UNIQUE/g then true else false
 							
-							isMultiEntry = false  #default
+							isMultiEntry = if dfn.match /[\s\)]ARRAY/g then true else false
 							
 							keyPath =
-								if dfn.match /^.+\(.+\)/
-									isMultiEntry = true if dfn.indexOf(",") > -1
-									if isMultiEntry and dfn.indexOf("+") > -1
-										throw new IDBError "Fail to parse definition(#{string}): ',' and '+' cannot state in the same definition."
-									string2KeyPath dfn[dfn.indexOf("(")+1...dfn.indexOf ")"]
+								if matcher = dfn.match /.+(\(.+\)).*/
+									extract2KeyPath matcher[1]
 								else
-									index2KeyPath indexName
+									indexName
 							
 							store.addIndex(indexName, keyPath, isUnique, isMultiEntry)
 				
@@ -120,36 +115,23 @@ class Schema
 	
 	
 	
+	
+	
+	
+	
+	
 	#extract key path from string
 	#examples:
-	#  "name.first,name.last,nick" -> [["name","first"],["name","last"],"nick"]
-	#  "country+city+region+street" -> ["country","city","region","street"]
-	#  "info.email" -> ["info","email"]
-	string2KeyPath = (string)->
-		if string.indexOf(",") > -1
-			( string2KeyPath(keyPath) for keyPath in string.split "," )
-		else if string.indexOf("+") > -1
-			( string2KeyPath(keyPath) for keyPath in string.split "+" )
-		else
-			string = string.replace(".", ",") if string.indexOf(".") > -1
+	#  "(name, info.email)" -> ["name","info.email"]
+	extract2KeyPath = (string)->
+		
+		if (opening = string.indexOf("(")) > -1
+			string = string[opening + 1...string.lastIndexOf(")")]
 			
-			if string.match /^(\'\'|\"\")$/
-				""
-			else if string.match /(\'|\")/g
-				throw new IDBError "Fail to parse definition(#{string}): quotation mark not in pairs."
+			if itemStrings = string.match /[^,]+/g
+				arr = ( extract2KeyPath(key.trim()) for key in itemStrings )
+				if arr.length = 1 then arr[0] else arr
 			else
 				string
-	
-	
-	
-	
-	#extract index name to key path
-	#examples:
-	#  "address.country" -> ["address","country"]
-	#  "name" -> "name"
-	index2KeyPath = (indexName)->
-		if indexName.indexOf(".") > -1
-			indexName.split(".")
 		else
-			indexName
-	
+			string

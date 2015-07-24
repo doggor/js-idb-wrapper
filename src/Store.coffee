@@ -86,64 +86,64 @@ class Store
 			
 			# x <= index <= y
 			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*<=[\s\t]*('.*'|".*"|[^\s\t]+)[\s\t]*<=[\s\t]*('.*'|".*"|[^\s\t]+)$/
-				[ (extractStr matcher[2]) , IDBKeyRange.bound (extractStr matcher[1]), (extractStr matcher[3]) ]
+				[ extractStr(matcher[2]) , IDBKeyRange.bound( extractStr(matcher[1]), extractStr(matcher[3]) ) ]
 			
 			# x < index <= y
 			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*<[\s\t]*('.*'|".*"|[^\s\t]+)[\s\t]*<=[\s\t]*('.*'|".*"|[^\s\t]+)$/
-				[ (extractStr matcher[2]) , IDBKeyRange.bound (extractStr matcher[1]), (extractStr matcher[3]), true ]
+				[ extractStr(matcher[2]) , IDBKeyRange.bound( extractStr(matcher[1]), extractStr(matcher[3]), true ) ]
 			
 			# x <= index < y
 			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*<=[\s\t]*('.*'|".*"|[^\s\t]+)[\s\t]*<[\s\t]*('.*'|".*"|[^\s\t]+)$/
-				[ (extractStr matcher[2]) , IDBKeyRange.bound (extractStr matcher[1]), (extractStr matcher[3]), false, true ]
+				[ extractStr(matcher[2]) , IDBKeyRange.bound( extractStr(matcher[1]), extractStr(matcher[3]), false, true ) ]
 			
 			# x < index < y
 			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*<[\s\t]*('.*'|".*"|[^\s\t]+)[\s\t]*<[\s\t]*('.*'|".*"|[^\s\t]+)$/
-				[ (extractStr matcher[2]) , IDBKeyRange.bound (extractStr matcher[1]), (extractStr matcher[3]), true, true ]
+				[ extractStr(matcher[2]) , IDBKeyRange.bound( extractStr(matcher[1]), extractStr(matcher[3]), true, true ) ]
 			
 			# x >= index >= y
 			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*>=[\s\t]*('.*'|".*"|[^\s\t]+)[\s\t]*>=[\s\t]*('.*'|".*"|[^\s\t]+)$/
-				[ (extractStr matcher[2]) , IDBKeyRange.bound (extractStr matcher[3]), (extractStr matcher[1]) ]
+				[ extractStr(matcher[2]) , IDBKeyRange.bound( extractStr(matcher[3]), extractStr(matcher[1]) ) ]
 			
 			# x > index >= y
 			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*>[\s\t]*('.*'|".*"|[^\s\t]+)[\s\t]*>=[\s\t]*('.*'|".*"|[^\s\t]+)$/
-				[ (extractStr matcher[2]) , IDBKeyRange.bound (extractStr matcher[3]), (extractStr matcher[1]), true ]
+				[ extractStr(matcher[2]) , IDBKeyRange.bound( extractStr(matcher[3]), extractStr(matcher[1]), true ) ]
 			
 			# x >= index > y
 			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*>=[\s\t]*('.*'|".*"|[^\s\t]+)[\s\t]*>[\s\t]*('.*'|".*"|[^\s\t]+)$/
-				[ (extractStr matcher[2]) , IDBKeyRange.bound (extractStr matcher[3]), (extractStr matcher[1]), false, true ]
+				[ extractStr(matcher[2]) , IDBKeyRange.bound( extractStr(matcher[3]), extractStr(matcher[1]), false, true ) ]
 			
 			# x > index > y
 			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*>[\s\t]*('.*'|".*"|[^\s\t]+)[\s\t]*>[\s\t]*('.*'|".*"|[^\s\t]+)$/
-				[ (extractStr matcher[2]) , IDBKeyRange.bound (extractStr matcher[3]), (extractStr matcher[1]), true, true ]
+				[ extractStr(matcher[2]) , IDBKeyRange.bound( extractStr(matcher[3]), extractStr(matcher[1]), true, true ) ]
 			
 			# index <= x
 			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*<=[\s\t]*('.*'|".*"|[^\s\t]+)$/
-				[ (extractStr matcher[1]) , IDBKeyRange.upperBound (extractStr matcher[2]) ]
+				[ extractStr(matcher[1]) , IDBKeyRange.upperBound extractStr(matcher[2]) ]
 			
 			# index < x
 			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*<[\s\t]*('.*'|".*"|[^\s\t]+)$/
-				[ (extractStr matcher[1]) , IDBKeyRange.upperBound (extractStr matcher[2]), true ]
+				[ extractStr(matcher[1]) , IDBKeyRange.upperBound( extractStr(matcher[2]), true ) ]
 			
 			# index >= x
 			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*>=[\s\t]*('.*'|".*"|[^\s\t]+)$/
-				[ (extractStr matcher[1]) , IDBKeyRange.lowerBound (extractStr matcher[2]) ]
+				[ extractStr(matcher[1]) , IDBKeyRange.lowerBound extractStr(matcher[2]) ]
 			
 			# index > x
 			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*>[\s\t]*('.*'|".*"|[^\s\t]+)$/
-				[ (extractStr matcher[1]) , IDBKeyRange.lowerBound (extractStr matcher[2]), true ]
+				[ extractStr(matcher[1]) , IDBKeyRange.lowerBound( extractStr(matcher[2]), true ) ]
 			
 			# index = x
-			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*=[\s\t]*('.*'|".*"|[^\s\t]+)$/
-				[ (extractStr matcher[1]) , IDBKeyRange.only (extractStr matcher[2]) ]
+			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)[\s\t]*=[\s\t]*('.*'|".*"|\[.*\]|[^\s\t]+)$/
+				[ extractStr(matcher[1]) , IDBKeyRange.only extractStr(matcher[2]) ]
 			
 			#index
 			when matcher = expression.match /^('.*'|".*"|[^\s\t]+)$/
-				[ (extractStr matcher[1]) , null ]
+				[ extractStr(matcher[1]) , null ]
 			
 			else
 				throw new IDBError("Unknown statment (#{expression}).")
 		
-		new Query(@, (indexName), range)
+		new Query(@, indexName, range)
 	
 	
 	

@@ -93,7 +93,7 @@
     request.onsuccess = function(event) {
       return d.resolve(event);
     };
-    request.onerror = function(event) {
+    request.onerror = request.onblocked = function(event) {
       return d.reject(event);
     };
     return toPromise(d);
@@ -124,7 +124,7 @@
   })(Error);
 
   Schema = (function() {
-    var index2KeyPath, string2KeyPath;
+    var extract2KeyPath;
 
     Schema.Store = (function() {
       function Store(name1) {
@@ -161,7 +161,7 @@
     }
 
     Schema.prototype.applyDefinition = function(dbDefinition) {
-      var dfn, i, indexName, isMultiEntry, isUnique, keyPath, len, results1, store, storeDfn, storeName;
+      var dfn, i, indexName, isMultiEntry, isUnique, keyPath, len, matcher, results1, store, storeDfn, storeName;
       if (typeof dbDefinition !== "object") {
         throw new IDBError("The database definition must be JSON.");
       }
@@ -182,37 +182,25 @@
               throw new IDBError("Index definition must be in string form.");
               break;
             } else {
-              dfn = dfn.trim().replace(/(\s|\t)+/g, " ").replace(/\s?\(\s?/g, "(").replace(/\s?\)\s?/g, ")").replace(/\s?,\s?/g, ",").replace(/\s?\+\s?/g, "+").replace(/\s?\.\s?/g, ".");
+              dfn = dfn.trim().replace(/[\s\t]+/g, " ").replace(/\s?\(\s?/g, "(").replace(/\s?\)\s?/g, ")").replace(/\s?\.\s?/g, ".");
               if (dfn.match(/^KEY/)) {
                 if (store.option.keyPath != null) {
                   throw new IDBError("Store key duplicated.");
                 }
-                if (dfn.match(/^KEY\(.+\)/)) {
-                  store.option.keyPath = string2KeyPath(dfn.slice(4, dfn.indexOf(")")));
+                if (matcher = dfn.match(/^KEY(\(.+\)).*$/)) {
+                  store.option.keyPath = extract2KeyPath(matcher[1]);
                 }
                 if (dfn.match(/AUTO$/)) {
                   store.option.autoIncrement = true;
                 }
               } else {
-                indexName = dfn.replace(/\(.+\)/, "").replace(/( UNIQUE)$/, "");
+                indexName = dfn.replace(/[\(\s].+/, "");
                 if (!indexName.match(/(\w|\.)+/)) {
                   throw new IDBError("Invalid index name(" + indexName + ").");
                 }
-                isUnique = dfn.match(/( UNIQUE)$/) ? true : false;
-                isMultiEntry = false;
-                keyPath = (function() {
-                  if (dfn.match(/^.+\(.+\)/)) {
-                    if (dfn.indexOf(",") > -1) {
-                      isMultiEntry = true;
-                    }
-                    if (isMultiEntry && dfn.indexOf("+") > -1) {
-                      throw new IDBError("Fail to parse definition(" + string + "): ',' and '+' cannot state in the same definition.");
-                    }
-                    return string2KeyPath(dfn.slice(dfn.indexOf("(") + 1, dfn.indexOf(")")));
-                  } else {
-                    return index2KeyPath(indexName);
-                  }
-                })();
+                isUnique = dfn.match(/[\s\)]UNIQUE/g) ? true : false;
+                isMultiEntry = dfn.match(/[\s\)]ARRAY/g) ? true : false;
+                keyPath = (matcher = dfn.match(/.+(\(.+\)).*/)) ? extract2KeyPath(matcher[1]) : indexName;
                 store.addIndex(indexName, keyPath, isUnique, isMultiEntry);
               }
             }
@@ -223,43 +211,30 @@
       return results1;
     };
 
-    string2KeyPath = function(string) {
-      var i, j, keyPath, len, len1, ref, ref1, results1, results2;
-      if (string.indexOf(",") > -1) {
-        ref = string.split(",");
-        results1 = [];
-        for (i = 0, len = ref.length; i < len; i++) {
-          keyPath = ref[i];
-          results1.push(string2KeyPath(keyPath));
-        }
-        return results1;
-      } else if (string.indexOf("+") > -1) {
-        ref1 = string.split("+");
-        results2 = [];
-        for (j = 0, len1 = ref1.length; j < len1; j++) {
-          keyPath = ref1[j];
-          results2.push(string2KeyPath(keyPath));
-        }
-        return results2;
-      } else {
-        if (string.indexOf(".") > -1) {
-          string = string.replace(".", ",");
-        }
-        if (string.match(/^(\'\'|\"\")$/)) {
-          return "";
-        } else if (string.match(/(\'|\")/g)) {
-          throw new IDBError("Fail to parse definition(" + string + "): quotation mark not in pairs.");
+    extract2KeyPath = function(string) {
+      var arr, itemStrings, key, opening;
+      if ((opening = string.indexOf("(")) > -1) {
+        string = string.slice(opening + 1, string.lastIndexOf(")"));
+        if (itemStrings = string.match(/[^,]+/g)) {
+          arr = (function() {
+            var i, len, results1;
+            results1 = [];
+            for (i = 0, len = itemStrings.length; i < len; i++) {
+              key = itemStrings[i];
+              results1.push(extract2KeyPath(key.trim()));
+            }
+            return results1;
+          })();
+          if (arr.length = 1) {
+            return arr[0];
+          } else {
+            return arr;
+          }
         } else {
           return string;
         }
-      }
-    };
-
-    index2KeyPath = function(indexName) {
-      if (indexName.indexOf(".") > -1) {
-        return indexName.split(".");
       } else {
-        return indexName;
+        return string;
       }
     };
 
@@ -278,23 +253,16 @@
     }
 
     Query.prototype.getIDBIndexIfSet = function(idbStore) {
-      var err, idbIndex;
-      if (this._indexName === "remark") {
-        try {
-          idbIndex = idbStore.index(this._indexName);
-          console.log(idbIndex);
-          return idbIndex;
-        } catch (_error) {
-          err = _error;
-          console.error(err);
-          throw err;
-        }
-      } else {
+      var err;
+      try {
         if (this._indexName) {
           return idbStore.index(this._indexName);
         } else {
           return idbStore;
         }
+      } catch (_error) {
+        err = _error;
+        return idbStore;
       }
     };
 
@@ -371,7 +339,11 @@
       return this.limit(1).each(function(object, key) {
         return [object, key];
       }).then(function(data) {
-        return func(data[0][0], data[0][1]);
+        if (data.length > 0) {
+          return func(data[0][0], data[0][1]);
+        } else {
+          return func(null, null);
+        }
       });
     };
 
@@ -505,7 +477,7 @@
             return [extractStr(matcher[1]), IDBKeyRange.lowerBound(extractStr(matcher[2]))];
           case !(matcher = expression.match(/^('.*'|".*"|[^\s\t]+)[\s\t]*>[\s\t]*('.*'|".*"|[^\s\t]+)$/)):
             return [extractStr(matcher[1]), IDBKeyRange.lowerBound(extractStr(matcher[2]), true)];
-          case !(matcher = expression.match(/^('.*'|".*"|[^\s\t]+)[\s\t]*=[\s\t]*('.*'|".*"|[^\s\t]+)$/)):
+          case !(matcher = expression.match(/^('.*'|".*"|[^\s\t]+)[\s\t]*=[\s\t]*('.*'|".*"|\[.*\]|[^\s\t]+)$/)):
             return [extractStr(matcher[1]), IDBKeyRange.only(extractStr(matcher[2]))];
           case !(matcher = expression.match(/^('.*'|".*"|[^\s\t]+)$/)):
             return [extractStr(matcher[1]), null];
@@ -582,6 +554,7 @@
       if (this._idbDatabase != null) {
         return newPromise(this._idbDatabase);
       } else {
+        console.log("open db " + this._name + " " + this._version);
         r = indexedDB.open(this._name, this._version);
         r.onblocked = this._onVersionConflictHandler;
         r.onupgradeneeded = (function(_this) {
@@ -619,11 +592,16 @@
     };
 
     Database.prototype.remove = function() {
-      return IDBRequest2Q(indexDB.deleteDatabase(_name)).then((function(_this) {
+      this.close();
+      return IDBRequest2Q(indexedDB.deleteDatabase(this._name)).then((function(_this) {
         return function() {
           return _this._name = _this._version = _this._dbDefinition = _this._onVersionConflictHandler = _this._idbDatabase = _this._batchTx = null;
         };
-      })(this));
+      })(this))["catch"](function(err) {
+        if (!err instanceof IDBVersionChangeEvent) {
+          throw err;
+        }
+      });
     };
 
     Database.prototype.batch = function() {
@@ -635,18 +613,19 @@
           return _this._batchTx = tx;
         };
       })(this));
-      p.run = (function(_this) {
-        return function(batchFunc) {
-          return p.then(function() {
-            try {
-              return batchFunc(this);
-            } finally {
-              this._batchTx = null;
-            }
-          });
-        };
-      })(this);
-      return p;
+      return {
+        run: (function(_this) {
+          return function(batchFunc) {
+            return p.then(function() {
+              try {
+                return batchFunc(_this);
+              } finally {
+                _this._batchTx = null;
+              }
+            });
+          };
+        })(this)
+      };
     };
 
     Database.prototype.doUpgrade = function(idb) {
@@ -654,7 +633,9 @@
       if (this._dbDefinition === null) {
         throw new IDBError("DB definition not found.");
       }
+      console.log("upgrade db " + this._name + " " + this._version);
       _schema = new Schema(this._dbDefinition);
+      console.log(_schema);
       actions = [];
       currentStoreNames = idb.objectStoreNames;
       if (currentStoreNames.length > 0) {

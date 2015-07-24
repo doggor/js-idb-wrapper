@@ -14,16 +14,14 @@ class Query
 	
 	#return IDBIndex if indexName given on constructing, else return back the given IDBStore object
 	getIDBIndexIfSet: (idbStore)->
-		if @_indexName is "remark"
-			try
-				idbIndex = idbStore.index(@_indexName)
-				console.log idbIndex
-				idbIndex
-			catch err
-				console.error err
-				throw err
-		else
-			if @_indexName then idbStore.index(@_indexName) else idbStore
+		try
+			if @_indexName
+				idbStore.index(@_indexName)
+			else
+				idbStore
+		catch err
+			idbStore
+			
 	
 	
 	
@@ -107,7 +105,10 @@ class Query
 		.each (object, key)->
 			[object, key]
 		.then (data)->
-			func(data[0][0], data[0][1])
+			if data.length > 0
+				func(data[0][0], data[0][1])
+			else
+				func(null, null)
 	
 	
 	

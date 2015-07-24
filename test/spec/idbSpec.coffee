@@ -7,14 +7,18 @@ describe "Test: js-idb-wrapper", ->
 	IDBKeyRange = window.IDBKeyRange or window.webkitIDBKeyRange or window.msIDBKeyRange
 	
 	
-	beforeAll ->
+	beforeAll (done)->
 		#remove any built db
-		indexedDB.deleteDatabase "db1"
+		r1 = indexedDB.deleteDatabase "db1"
+		r1.onsuccess = ->
+			r2 = indexedDB.deleteDatabase "db2"
+			r2.onsuccess = ->
+				done()
 	
 	
 	
 	
-	describe "IDB('db1') in version 1", ->
+	describe "IDB('db1')", ->
 		
 		
 		db1 = null
@@ -26,9 +30,9 @@ describe "Test: js-idb-wrapper", ->
 				.version 1, 
 					"store1": [
 						"KEY(id) AUTO"
-						"first_name"
-						"last_name"
-						"name(first_name + last_name)"
+						"name"
+						"first_name(name.first)"
+						"last_name(name.last)"
 						"email UNIQUE"
 						"age"
 						"remark"]
@@ -62,7 +66,7 @@ describe "Test: js-idb-wrapper", ->
 	
 	
 	
-		describe "store('store1')", ->
+		describe "IDB('db1').store('store1')", ->
 			
 			
 			store1 = dataToInsert = null
@@ -70,19 +74,22 @@ describe "Test: js-idb-wrapper", ->
 			
 			beforeAll ->
 				dataToInsert = [
-						first_name:      "AA"
-						last_name:       "Tester"
+						name:
+							first:       "AA"
+							last:        "Tester"
 						email:           "test1@gmail.com"
 						age:             20
-						remark:          "it should contains all indexes"
+						remark:          "first object"
 					,
-						first_name:      "BB"
-						last_name:       "Tester"
+						name:
+							first:       "BB"
+							last:        "Tester"
 						email:           "test2@yahoo.com"
 						age:             22
 					,
-						first_name:      "CC"
-						last_name:       "Tester"
+						name:
+							first:       "CC"
+							last:        "Tester"
 						email:           "test3@hotmail.com"
 						age:             24
 						remark:          "last object"
@@ -119,7 +126,12 @@ describe "Test: js-idb-wrapper", ->
 				
 				store1.indexes()
 				.then (indexNames)->
-					expect(indexNames.length).toBe(Object.keys(dataToInsert[0]).length + 1) # +1 for "name(first_name+last_name)"
+					expect(indexNames).toContain("name")
+					expect(indexNames).toContain("first_name")
+					expect(indexNames).toContain("last_name")
+					expect(indexNames).toContain("email")
+					expect(indexNames).toContain("age")
+					expect(indexNames).toContain("remark")
 					done()
 				.catch done.fail
 			
@@ -161,13 +173,10 @@ describe "Test: js-idb-wrapper", ->
 								result.push cursor.value
 								cursor.continue()
 							else
-								validate()
-						validate= ()->
-							for i, r of result
-								for key, value of dataToInsert[i]
-									done.fail("value inconsistent.") if r[key] isnt value
-							expect(result.length).toBe(3)
-							done()
+								expect(result[0].name).toEqual(first: "AA", last: "Tester")
+								expect(result[1].name).toEqual(first: "BB", last: "Tester")
+								expect(result[2].name).toEqual(first: "CC", last: "Tester")
+								done()
 				.catch done.fail
 			
 			
@@ -177,9 +186,11 @@ describe "Test: js-idb-wrapper", ->
 				
 				store1.all()
 				.each (object, key)->
-					object
-				.then (objects)->
-					expect(objects.length).toBe(3)
+					object.name
+				.then (names)->
+					expect(names[0]).toEqual(first: "AA", last: "Tester")
+					expect(names[1]).toEqual(first: "BB", last: "Tester")
+					expect(names[2]).toEqual(first: "CC", last: "Tester")
 					done()
 				.catch done.fail
 			
@@ -190,7 +201,9 @@ describe "Test: js-idb-wrapper", ->
 				
 				store1.all()
 				.list (objects, keys)->
-					expect(objects.length).toBe(3)
+					expect(objects[0].name).toEqual(first: "AA", last: "Tester")
+					expect(objects[1].name).toEqual(first: "BB", last: "Tester")
+					expect(objects[2].name).toEqual(first: "CC", last: "Tester")
 					done()
 				.catch done.fail
 			
@@ -290,7 +303,7 @@ describe "Test: js-idb-wrapper", ->
 			
 			
 			
-			it "can query data using 'a<=b'", (done)->
+			it "can query index using 'a<=b'", (done)->
 				
 				store1.where "age <= 22"
 				.count (result)->
@@ -301,7 +314,7 @@ describe "Test: js-idb-wrapper", ->
 			
 			
 			
-			it "can query data using 'a>=b'", (done)->
+			it "can query index using 'a>=b'", (done)->
 				
 				store1.where "age >= 22"
 				.count (result)->
@@ -312,7 +325,7 @@ describe "Test: js-idb-wrapper", ->
 			
 			
 			
-			it "can query data using 'a<b<c'", (done)->
+			it "can query index using 'a<b<c'", (done)->
 				
 				store1.where "20 < age < 24"
 				.count (result)->
@@ -323,7 +336,7 @@ describe "Test: js-idb-wrapper", ->
 			
 			
 			
-			it "can query data using 'a<=b<c'", (done)->
+			it "can query index using 'a<=b<c'", (done)->
 				
 				store1.where "20 <= age < 24"
 				.count (result)->
@@ -334,7 +347,7 @@ describe "Test: js-idb-wrapper", ->
 			
 			
 			
-			it "can query data using 'a<b<=c'", (done)->
+			it "can query index using 'a<b<=c'", (done)->
 				
 				store1.where "20 < age <= 24"
 				.count (result)->
@@ -345,7 +358,7 @@ describe "Test: js-idb-wrapper", ->
 			
 			
 			
-			it "can query data using 'a<=b<=c'", (done)->
+			it "can query index using 'a<=b<=c'", (done)->
 				
 				store1.where "20 <= age <= 24"
 				.count (result)->
@@ -356,7 +369,7 @@ describe "Test: js-idb-wrapper", ->
 			
 			
 			
-			it "can query data using 'a>b>c'", (done)->
+			it "can query index using 'a>b>c'", (done)->
 				
 				store1.where "24 > age > 20"
 				.count (result)->
@@ -367,7 +380,7 @@ describe "Test: js-idb-wrapper", ->
 			
 			
 			
-			it "can query data using 'a>=b>c'", (done)->
+			it "can query index using 'a>=b>c'", (done)->
 				
 				store1.where "24 >= age > 20"
 				.count (result)->
@@ -378,7 +391,7 @@ describe "Test: js-idb-wrapper", ->
 			
 			
 			
-			it "can query data using 'a>b>=c'", (done)->
+			it "can query index using 'a>b>=c'", (done)->
 				
 				store1.where "24 > age >= 20"
 				.count (result)->
@@ -389,7 +402,7 @@ describe "Test: js-idb-wrapper", ->
 			
 			
 			
-			it "can query data using 'a>=b>=c'", (done)->
+			it "can query index using 'a>=b>=c'", (done)->
 				
 				store1.where "24 >= age >= 20"
 				.count (result)->
@@ -452,8 +465,12 @@ describe "Test: js-idb-wrapper", ->
 					email:           "test4@gmail.com"
 					age:             28
 				
-				db1.store("store2").add
-					todo:            "check results"
+				store2 = db1.store("store2")
+				store2.add
+					todo:            "Task 1"
+					created_date:    new Date()
+				store2.add
+					todo:            "Task 2"
 					created_date:    new Date()
 			
 			.then ->
@@ -461,94 +478,132 @@ describe "Test: js-idb-wrapper", ->
 				store1Length = store2Length = null
 				
 				db1.store("store1").all().count (total)->
-					store1Length = total
+					expect(total).toBe(3)
 				.then ->
 					db1.store("store2").all().count (total)->
-						store2Length = total
+						expect(total).toBe(2)
 				.then ->
-					expect([store1Length, store2Length]).toEqual([3, 1])
 					done()
 				.catch done.fail
 		
 		
 		
-		###
-		afterAll (done)->
-			#close db1
-			db1.close()
+		
+		it "can remove the database itself", (done)->
 			
-			console.log "wait 4 seconds to complete db closing..."
-			setTimeout ->
+			db1.remove()
+			.then ->
+				expect(db1._idbDatabase).toBe(null)
 				done()
-			, 4000
-		###
+			.catch done.fail
 	
 	
 	
 	
-	###
-	describe "IDB('db1') in version 2", ->
+	
+	
+	
+	
+	describe "IDB('db2')", ->
 		
 		
-		db1 = null
+		db2 = null
 		
 		
 		beforeAll ->
-			#define the db's version 2
-			db1 = IDB("db1")
-				.version 2, 
+			#define the db
+			db2 = IDB("db2")
+				.version 1, 
 					"store1": [
-						"KEY(id) AUTO"
-						"first_name"
-						"last_name"
-						"name(first_name + last_name)"
-						"email"                        #remove UNIQUE
-						"age"
-						]                              #remove index "remark"
-					                                   #remove store2
-					"store3": [                        #new object store
-						"KEY(latitude, longitude)"
-						"name"
-						"description"]
-			db1.onVersionConflict (event)->console.error event
+						"KEY AUTO"
+						"position(pos_x, pos_y)"
+						"tags ARRAY"]
 		
 		
 		
 		
-		describe "store('store1')", ->
+		it "can return the name", (done)->
 			
+			db2.name()
+			.then (dbName)->
+				expect(dbName).toBe("db2")
+				done()
+			.catch done.fail
+		
+		
+		
+		it "can insert some data as usual", (done)->
+			
+			store1 = db2.store("store1")
+			
+			db2.batch("store1").run ->
+				store1.add
+					pos_x: 0
+					pos_y: 0
+					tags: ["html", "js", "css"]
+				store1.add
+					pos_x: 0
+					pos_y: 1
+					tags: ["js", "css"]
+				store1.add
+					pos_x: 1
+					pos_y: 0
+					tags: ["html"]
+				store1.add
+					pos_x: 1
+					pos_y: 1
+					tags: ["js", "html"]
+				store1.add
+					pos_x: 2
+					pos_y: 1
+					tags: ["css", "html"]
+				store1.add
+					pos_x: 3
+					pos_y: 4
+					tags: ["css", "js"]
+			.then ->
+				store1.all().count (total)->
+					expect(total).toBe(6)
+			.then ->
+				done()
+			.catch done.fail
+		
+		
+		
+		
+		
+		describe "IDB('db2').store('store1')", ->
 			
 			store1 = null
 			
-			
 			beforeAll ->
-				store1 = db1.store('store1')
+				store1 = db2.store('store1')
 			
 			
-			it "can list item", (done)->
+			it "test", (done)->
 				store1.all().list (items)->
 					console.log items
-					expect(items).toEqual(items)
-			
-			
-			it "can no longer use store1.remark index", (done)->
-				
-				store1.where "remark"
-				.count (length)->
-					console.log "count()"
-					done.fail "store1.remark's length return #{length}"
-				.then ->
-					console.log "then"
-				.catch (err)->
-					console.log err
-					expect(err).toBe(err)
+					expect(1).toBe(1)
 					done()
+				.catch done.fail
+			###
+			it "can query composite index using 'a=b'", (done)->
+				
+				store1.where "position = [1, 1]"
+				.first (item)->
+					expect(item.pos_x).toBe(1)
+					expect(item.pos_y).toBe(1)
+					done()
+				.catch done.fail
+			###
+			
+			
+			
+			
 		
-		
-		
-		###
-		#TODO: db upgrade test
-		
-		#TODO db remove test
+		#describe "upgrade IDB('db2')", ->
+			
+	
+	
 	
 	

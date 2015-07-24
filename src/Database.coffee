@@ -47,6 +47,7 @@ class Database
 		if @_idbDatabase?
 			newPromise @_idbDatabase
 		else
+			console.log "open db #{@_name} #{@_version}"
 			r = indexedDB.open(@_name, @_version)
 			r.onblocked = @_onVersionConflictHandler
 			r.onupgradeneeded = (event)=>@doUpgrade(event.target.result)
@@ -90,14 +91,22 @@ class Database
 	#remove the database form disk
 	#this object will no longer usable
 	remove: ->
-		IDBRequest2Q(indexDB.deleteDatabase(_name)).then ()=>
-			#clear
+		@close()
+		IDBRequest2Q( indexedDB.deleteDatabase(@_name) )
+		
+		.then =>
+			#clear all properties
 			@_name = 
 			@_version = 
 			@_dbDefinition = 
 			@_onVersionConflictHandler = 
 			@_idbDatabase = 
 			@_batchTx = null
+		
+		.catch (err)->
+			#ignore IDBVersionChangeEvent because we're deleteing db
+			throw err if not err instanceof IDBVersionChangeEvent
+			
 	
 	
 	
@@ -114,13 +123,13 @@ class Database
 			@_batchTx = tx
 		
 		#return runnable object that extends the transaction promise
-		p.run = (batchFunc)=>
-			p.then ->
-				try
-					batchFunc(@)
-				finally
-					@_batchTx = null
-		p
+		{} =
+			run: (batchFunc)=>
+				p.then =>
+					try
+						batchFunc(@)
+					finally
+						@_batchTx = null
 	
 	
 	
@@ -129,9 +138,9 @@ class Database
 		
 		if @_dbDefinition is null
 			throw new IDBError "DB definition not found."
-		
+		console.log "upgrade db #{@_name} #{@_version}"
 		_schema = new Schema(@_dbDefinition)
-		
+		console.log _schema
 		#list of functions that make change to the db
 		actions = []
 		
