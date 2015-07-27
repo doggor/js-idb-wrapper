@@ -7,12 +7,18 @@
     beforeAll(function(done) {
       var r1;
       r1 = indexedDB.deleteDatabase("db1");
-      return r1.onsuccess = function() {
+      r1.onsuccess = function() {
         var r2;
         r2 = indexedDB.deleteDatabase("db2");
-        return r2.onsuccess = function() {
+        r2.onsuccess = function() {
           return done();
         };
+        return r2.onerror = function() {
+          return done.fail;
+        };
+      };
+      return r1.onerror = function() {
+        return done.fail;
       };
     });
     describe("IDB('db1')", function() {
@@ -365,7 +371,7 @@
         })["catch"](done.fail);
       });
     });
-    return describe("IDB('db2')", function() {
+    describe("IDB('db2')", function() {
       var db2;
       db2 = null;
       beforeAll(function() {
@@ -373,13 +379,7 @@
           "store1": ["KEY AUTO", "position(pos_x, pos_y)", "tags ARRAY"]
         });
       });
-      it("can return the name", function(done) {
-        return db2.name().then(function(dbName) {
-          expect(dbName).toBe("db2");
-          return done();
-        })["catch"](done.fail);
-      });
-      it("can insert some data as usual", function(done) {
+      it("can batch insert data as usual", function(done) {
         var store1;
         store1 = db2.store("store1");
         return db2.batch("store1").run(function() {
@@ -421,31 +421,65 @@
           return done();
         })["catch"](done.fail);
       });
+      describe("IDB('db2').store('store1')", function() {
+        var store1;
+        store1 = null;
+        beforeAll(function() {
+          return store1 = db2.store('store1');
+        });
+        it("can query composite index using 'a=[x,y]'", function(done) {
+          return store1.where("position = [1, 1]").first(function(item) {
+            expect(item.pos_x).toBe(1);
+            expect(item.pos_y).toBe(1);
+            return done();
+          })["catch"](done.fail);
+        });
+        it("can query composite index using '[x1,y1]<=a<=[x2,y2]'", function(done) {
+          return store1.where("[0,0] <= position <= [1,1]").list(function(items) {
+            expect(items.length).toBe(4);
+            return done();
+          })["catch"](done.fail);
+        });
+        return it("can query multi-entry using 'a=b'", function(done) {
+          return store1.where("tags = html").list(function(items) {
+            expect(items.length).toBe(4);
+            return done();
+          })["catch"](done.fail);
+        });
+      });
+      describe("close IDB('db2') for upgrade", function() {
+        return beforeAll(function(done) {
+          indexedDB.close();
+          return setTimeout((function() {
+            return done();
+          }), 1000);
+        });
+      });
+      describe("define version 2 schema for IDB('db2')", function() {
+        db2 = null;
+        return beforeAll(function() {
+          return db2 = IDB("db2").version(1, {
+            "store1": ["KEY AUTO", pos_x, pos_y, "position(pos_x, pos_y)", "tags ARRAY"]
+          });
+        });
+      });
       return describe("IDB('db2').store('store1')", function() {
         var store1;
         store1 = null;
         beforeAll(function() {
           return store1 = db2.store('store1');
         });
-        return it("test", function(done) {
-          return store1.all().list(function(items) {
-            console.log(items);
-            expect(1).toBe(1);
+        return it("can access newly added index", function(done) {
+          return store1.where("pos_x = 2").list(function(items) {
+            expect(items.length).toBe(1);
             return done();
           })["catch"](done.fail);
         });
-
-        /*
-        			it "can query composite index using 'a=b'", (done)->
-        				
-        				store1.where "position = [1, 1]"
-        				.first (item)->
-        					expect(item.pos_x).toBe(1)
-        					expect(item.pos_y).toBe(1)
-        					done()
-        				.catch done.fail
-         */
       });
+    });
+    return afterAll(function() {
+      indexedDB.deleteDatabase("db1");
+      return indexedDB.deleteDatabase("db2");
     });
   });
 

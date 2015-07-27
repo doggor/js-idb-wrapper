@@ -130,7 +130,7 @@ class Schema
 			
 			if itemStrings = string.match /[^,]+/g
 				arr = ( extract2KeyPath(key.trim()) for key in itemStrings )
-				if arr.length = 1 then arr[0] else arr
+				if arr.length is 1 then arr[0] else arr
 			else
 				string
 		else

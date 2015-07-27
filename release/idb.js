@@ -88,15 +88,15 @@
   IDBKeyRange = env.IDBKeyRange || env.webkitIDBKeyRange || env.msIDBKeyRange;
 
   IDBRequest2Q = function(request) {
-    var d;
-    d = newDefer();
+    var deferred;
+    deferred = newDefer();
     request.onsuccess = function(event) {
-      return d.resolve(event);
+      return deferred.resolve(event);
     };
     request.onerror = request.onblocked = function(event) {
-      return d.reject(event);
+      return deferred.reject(event);
     };
-    return toPromise(d);
+    return toPromise(deferred);
   };
 
   IDBTx2Q = function(tx) {
@@ -225,7 +225,7 @@
             }
             return results1;
           })();
-          if (arr.length = 1) {
+          if (arr.length === 1) {
             return arr[0];
           } else {
             return arr;
@@ -522,9 +522,11 @@
       this._name = dbName;
       this._version = null;
       this._dbDefinition = null;
-      this._onVersionConflictHandler = null;
       this._idbDatabase = null;
       this._batchTx = null;
+      this._onVersionConflictHandler = function(event) {
+        throw event;
+      };
     }
 
     Database.prototype.name = function() {
@@ -556,14 +558,27 @@
       } else {
         console.log("open db " + this._name + " " + this._version);
         r = indexedDB.open(this._name, this._version);
-        r.onblocked = this._onVersionConflictHandler;
         r.onupgradeneeded = (function(_this) {
           return function(event) {
+            console.log(_this._name + " onupgradeneeded");
             return _this.doUpgrade(event.target.result);
           };
         })(this);
-        return IDBRequest2Q(r).then((function(_this) {
+        return IDBRequest2Q(r)["catch"]((function(_this) {
           return function(event) {
+            if (event instanceof IDBVersionChangeEvent) {
+              console.log(_this._name + " onblocked");
+              if (typeof _this._onVersionConflictHandler === "function") {
+                return _this._onVersionConflictHandler();
+              }
+            } else {
+              console.log(_this._name + " onerror");
+              throw event;
+            }
+          };
+        })(this)).then((function(_this) {
+          return function(event) {
+            console.log(_this._name + " onsuccess");
             return _this._idbDatabase = event.target.result;
           };
         })(this));
@@ -584,24 +599,18 @@
       return new Store(storeName, this);
     };
 
-    Database.prototype.close = function() {
-      if (this._idbDatabase) {
-        this._idbDatabase.close();
-        this._idbDatabase = null;
-      }
-    };
-
     Database.prototype.remove = function() {
-      this.close();
-      return IDBRequest2Q(indexedDB.deleteDatabase(this._name)).then((function(_this) {
+      return IDBRequest2Q(indexedDB.deleteDatabase(this._name))["catch"]((function(_this) {
+        return function(event) {
+          if (!event instanceof IDBVersionChangeEvent) {
+            throw event;
+          }
+        };
+      })(this)).then((function(_this) {
         return function() {
           return _this._name = _this._version = _this._dbDefinition = _this._onVersionConflictHandler = _this._idbDatabase = _this._batchTx = null;
         };
-      })(this))["catch"](function(err) {
-        if (!err instanceof IDBVersionChangeEvent) {
-          throw err;
-        }
-      });
+      })(this));
     };
 
     Database.prototype.batch = function() {
@@ -633,9 +642,7 @@
       if (this._dbDefinition === null) {
         throw new IDBError("DB definition not found.");
       }
-      console.log("upgrade db " + this._name + " " + this._version);
       _schema = new Schema(this._dbDefinition);
-      console.log(_schema);
       actions = [];
       currentStoreNames = idb.objectStoreNames;
       if (currentStoreNames.length > 0) {

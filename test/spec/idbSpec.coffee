@@ -12,8 +12,9 @@ describe "Test: js-idb-wrapper", ->
 		r1 = indexedDB.deleteDatabase "db1"
 		r1.onsuccess = ->
 			r2 = indexedDB.deleteDatabase "db2"
-			r2.onsuccess = ->
-				done()
+			r2.onsuccess = ->done()
+			r2.onerror = ->done.fail
+		r1.onerror = ->done.fail
 	
 	
 	
@@ -522,17 +523,7 @@ describe "Test: js-idb-wrapper", ->
 		
 		
 		
-		it "can return the name", (done)->
-			
-			db2.name()
-			.then (dbName)->
-				expect(dbName).toBe("db2")
-				done()
-			.catch done.fail
-		
-		
-		
-		it "can insert some data as usual", (done)->
+		it "can batch insert data as usual", (done)->
 			
 			store1 = db2.store("store1")
 			
@@ -571,6 +562,76 @@ describe "Test: js-idb-wrapper", ->
 		
 		
 		
+		describe "IDB('db2').store('store1')", ->
+			
+			store1 = null
+			
+			
+			beforeAll ->
+				store1 = db2.store('store1')
+			
+			
+			it "can query composite index using 'a=[x,y]'", (done)->
+				
+				store1.where "position = [1, 1]"
+				.first (item)->
+					expect(item.pos_x).toBe(1)
+					expect(item.pos_y).toBe(1)
+					done()
+				.catch done.fail
+			
+			
+			
+			
+			it "can query composite index using '[x1,y1]<=a<=[x2,y2]'", (done)->
+				
+				store1.where "[0,0] <= position <= [1,1]"
+				.list (items)->
+					expect(items.length).toBe(4)
+					done()
+				.catch done.fail
+			
+			
+			
+			it "can query multi-entry using 'a=b'", (done)->
+				
+				store1.where "tags = html"
+				.list (items)->
+					expect(items.length).toBe(4)
+					done()
+				.catch done.fail
+	
+	
+	
+	
+		describe "close IDB('db2') for upgrade", ->
+			
+			
+			beforeAll (done)->
+				indexedDB.close()
+				#wait a while
+				setTimeout( (->done()) , 1000)
+		
+		
+		
+			
+		describe "define version 2 schema for IDB('db2')", ->
+			
+			db2 = null
+			
+			beforeAll ->
+				#define the db
+				db2 = IDB("db2")
+					.version 1, 
+						"store1": [
+							"KEY AUTO"
+							pos_x,  #adding new index
+							pos_y,  #adding new index
+							"position(pos_x, pos_y)"
+							"tags ARRAY"]
+		
+		
+		
 		
 		describe "IDB('db2').store('store1')", ->
 			
@@ -580,30 +641,20 @@ describe "Test: js-idb-wrapper", ->
 				store1 = db2.store('store1')
 			
 			
-			it "test", (done)->
-				store1.all().list (items)->
-					console.log items
-					expect(1).toBe(1)
-					done()
-				.catch done.fail
-			###
-			it "can query composite index using 'a=b'", (done)->
+			it "can access newly added index", (done)->
 				
-				store1.where "position = [1, 1]"
-				.first (item)->
-					expect(item.pos_x).toBe(1)
-					expect(item.pos_y).toBe(1)
+				store1.where "pos_x = 2"
+				.list (items)->
+					expect(items.length).toBe(1)
 					done()
 				.catch done.fail
-			###
-			
-			
-			
-			
-		
-		#describe "upgrade IDB('db2')", ->
-			
 	
 	
 	
+	
+	
+	
+	afterAll ->
+		indexedDB.deleteDatabase "db1"
+		indexedDB.deleteDatabase "db2"
 	

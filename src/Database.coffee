@@ -2,12 +2,13 @@ class Database
 	
 	
 	constructor: (dbName)->
-		@_name = dbName                     #the database name
-		@_version = null                    #the database version
-		@_dbDefinition = null               #the Schema object for this database
-		@_onVersionConflictHandler = null   #IDBOpenDBRequest.onblocked handler
-		@_idbDatabase = null                #the IDBDatabase object this object belong to
-		@_batchTx = null                    #IDBTransaction object that used for batch process
+		@_name = dbName                              #the database name
+		@_version = null                             #the database version
+		@_dbDefinition = null                        #the Schema object for this database
+		@_idbDatabase = null                         #the IDBDatabase object this object belong to
+		@_batchTx = null                             #IDBTransaction object that used for batch process
+		@_onVersionConflictHandler = (event)->       #IDBOpenDBRequest.onblocked handler
+			throw event
 	
 	
 	
@@ -49,9 +50,19 @@ class Database
 		else
 			console.log "open db #{@_name} #{@_version}"
 			r = indexedDB.open(@_name, @_version)
-			r.onblocked = @_onVersionConflictHandler
-			r.onupgradeneeded = (event)=>@doUpgrade(event.target.result)
-			IDBRequest2Q( r ).then (event)=>
+			r.onupgradeneeded = (event)=>
+				console.log "#{@_name} onupgradeneeded"
+				@doUpgrade(event.target.result)
+			IDBRequest2Q( r )
+			.catch (event)=>
+				if event instanceof IDBVersionChangeEvent
+					console.log "#{@_name} onblocked"
+					@_onVersionConflictHandler() if typeof @_onVersionConflictHandler is "function"
+				else
+					console.log "#{@_name} onerror"
+					throw event
+			.then (event)=>
+				console.log "#{@_name} onsuccess"
 				@_idbDatabase = event.target.result
 	
 	
@@ -76,14 +87,10 @@ class Database
 	
 	
 	
-	#try close the database if opened
-	#it will be closed after all transactions completed
-	#nothing return
-	close: ()->
-		if @_idbDatabase
-			@_idbDatabase.close()
-			@_idbDatabase = null
-		return
+	close: ->
+		@_idbDatabase.close()
+		@_idbDatabase = 
+		@_batchTx = null
 	
 	
 	
@@ -91,9 +98,10 @@ class Database
 	#remove the database form disk
 	#this object will no longer usable
 	remove: ->
-		@close()
 		IDBRequest2Q( indexedDB.deleteDatabase(@_name) )
-		
+		.catch (event)=>
+			#ignore IDBVersionChangeEvent because we're deleteing db
+			throw event if not event instanceof IDBVersionChangeEvent
 		.then =>
 			#clear all properties
 			@_name = 
@@ -102,11 +110,6 @@ class Database
 			@_onVersionConflictHandler = 
 			@_idbDatabase = 
 			@_batchTx = null
-		
-		.catch (err)->
-			#ignore IDBVersionChangeEvent because we're deleteing db
-			throw err if not err instanceof IDBVersionChangeEvent
-			
 	
 	
 	
@@ -138,9 +141,9 @@ class Database
 		
 		if @_dbDefinition is null
 			throw new IDBError "DB definition not found."
-		console.log "upgrade db #{@_name} #{@_version}"
+		
 		_schema = new Schema(@_dbDefinition)
-		console.log _schema
+		
 		#list of functions that make change to the db
 		actions = []
 		
