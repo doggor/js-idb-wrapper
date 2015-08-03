@@ -84,7 +84,7 @@ class Database
 	
 	
 	store: (storeName)->
-		new Store(storeName, @)
+		StoreManager(storeName, @)
 	
 	
 	

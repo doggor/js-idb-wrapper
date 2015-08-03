@@ -18,6 +18,7 @@ sourceFiles = [
 	"src/Query.coffee"
 	"src/Store.coffee"
 	"src/Database.coffee"
+	"src/StoreManager.coffee"
 	"src/DatabaseManager.coffee"
 	"src/export.coffee"
 ]

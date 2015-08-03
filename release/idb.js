@@ -1,5 +1,5 @@
 (function() {
-  var Database, DatabaseManager, IDBError, IDBKeyRange, IDBRequest2Q, IDBTransaction, IDBTx2Q, Query, Schema, Store, env, indexedDB, newDefer, newPromise, otherLib, toPromise,
+  var Database, DatabaseManager, IDBError, IDBKeyRange, IDBRequest2Q, IDBTransaction, IDBTx2Q, Query, Schema, Store, StoreManager, env, indexedDB, newDefer, newPromise, otherLib, toPromise,
     extend = function(child, parent) { for (var key in parent) { if (hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; },
     hasProp = {}.hasOwnProperty,
     slice = [].slice,
@@ -590,7 +590,7 @@
     };
 
     Database.prototype.store = function(storeName) {
-      return new Store(storeName, this);
+      return StoreManager(storeName, this);
     };
 
     Database.prototype.close = function() {
@@ -729,6 +729,19 @@
 
     return Database;
 
+  })();
+
+  StoreManager = (function() {
+    var stores;
+    stores = {};
+    return function(storeName, database) {
+      var key;
+      key = database._name + "." + storeName;
+      if (!stores.hasOwnProperty(key)) {
+        stores[key] = new Store(storeName, database);
+      }
+      return stores[key];
+    };
   })();
 
   DatabaseManager = (function() {
