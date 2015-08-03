@@ -102,7 +102,7 @@
   IDBTx2Q = function(tx) {
     var d;
     d = newDefer();
-    tx.onComplete = function(event) {
+    tx.oncomplete = function(event) {
       return d.resolve(event);
     };
     tx.onerror = tx.onabort = function(event) {
@@ -613,27 +613,29 @@
     };
 
     Database.prototype.batch = function() {
-      var p, storeNames;
-      storeNames = 1 <= arguments.length ? slice.call(arguments, 0) : [];
+      var batchFunc, i, storeNames;
+      storeNames = 2 <= arguments.length ? slice.call(arguments, 0, i = arguments.length - 1) : (i = 0, []), batchFunc = arguments[i++];
       this._batchTx = null;
-      p = this.getIDBTransaction(storeNames, "readwrite").then((function(_this) {
+      return this.getIDBTransaction(storeNames, "readwrite").then((function(_this) {
         return function(tx) {
-          return _this._batchTx = tx;
+          var storeName;
+          _this._batchTx = tx;
+          try {
+            batchFunc.apply(null, (function() {
+              var j, len, results1;
+              results1 = [];
+              for (j = 0, len = storeNames.length; j < len; j++) {
+                storeName = storeNames[j];
+                results1.push(this.store(storeName));
+              }
+              return results1;
+            }).call(_this));
+          } finally {
+            _this._batchTx = null;
+          }
+          return IDBTx2Q(tx);
         };
       })(this));
-      return {
-        run: (function(_this) {
-          return function(batchFunc) {
-            return p.then(function() {
-              try {
-                return batchFunc(_this);
-              } finally {
-                _this._batchTx = null;
-              }
-            });
-          };
-        })(this)
-      };
     };
 
     Database.prototype.doUpgrade = function(idb, tx) {

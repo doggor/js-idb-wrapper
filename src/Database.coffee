@@ -120,24 +120,24 @@ class Database
 	
 	
 	#create a transaction for upcoming actions
-	#usage: db.batch("store1", "store2", ...).run ()->...
-	batch: (storeNames...)->
+	#usage: db.batch("store1", "store2", ..., batchFunction)
+	batch: (storeNames..., batchFunc)->
 		
 		#first, clear any previous batch transaction
 		@_batchTx = null
 		
 		#get and set a new transaction to _batchTx
-		p = @getIDBTransaction(storeNames, "readwrite").then (tx)=>
+		@getIDBTransaction(storeNames, "readwrite").then (tx)=>
 			@_batchTx = tx
-		
-		#return runnable object that extends the transaction promise
-		{} =
-			run: (batchFunc)=>
-				p.then =>
-					try
-						batchFunc(@)
-					finally
-						@_batchTx = null
+			
+			#run function
+			try
+				batchFunc.apply null, (@.store(storeName) for storeName in storeNames)
+			finally
+				@_batchTx = null #clear tx
+			
+			IDBTx2Q(tx)
+					
 	
 	
 	

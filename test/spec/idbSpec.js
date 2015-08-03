@@ -333,15 +333,13 @@
         });
       });
       it("can operates multi-stores in once", function(done) {
-        return db1.batch("store1", "store2").run(function() {
-          var store2;
-          db1.store("store1").add({
+        return db1.batch("store1", "store2", function(store1, store2) {
+          store1.add({
             first_name: "DD",
             last_name: "Tester",
             email: "test4@gmail.com",
             age: 28
           });
-          store2 = db1.store("store2");
           store2.add({
             todo: "Task 1",
             created_date: new Date()
@@ -361,8 +359,8 @@
             });
           }).then(function() {
             return done();
-          })["catch"](done.fail);
-        });
+          });
+        })["catch"](done.fail);
       });
       return it("can remove the database itself", function(done) {
         return db1.remove().then(function() {
@@ -382,7 +380,7 @@
       it("can batch insert data as usual", function(done) {
         var store1;
         store1 = db2.store("store1");
-        return db2.batch("store1").run(function() {
+        return db2.batch("store1", function() {
           store1.add({
             pos_x: 0,
             pos_y: 0,

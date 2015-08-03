@@ -458,18 +458,18 @@ describe "Test: js-idb-wrapper", ->
 			
 		it "can operates multi-stores in once", (done)->
 			
-			db1.batch("store1", "store2").run ->
+			db1.batch "store1", "store2", (store1, store2)->
 				
-				db1.store("store1").add
+				store1.add
 					first_name:      "DD"
 					last_name:       "Tester"
 					email:           "test4@gmail.com"
 					age:             28
 				
-				store2 = db1.store("store2")
 				store2.add
 					todo:            "Task 1"
 					created_date:    new Date()
+				
 				store2.add
 					todo:            "Task 2"
 					created_date:    new Date()
@@ -485,7 +485,8 @@ describe "Test: js-idb-wrapper", ->
 						expect(total).toBe(2)
 				.then ->
 					done()
-				.catch done.fail
+			
+			.catch done.fail
 		
 		
 		
@@ -527,7 +528,7 @@ describe "Test: js-idb-wrapper", ->
 			
 			store1 = db2.store("store1")
 			
-			db2.batch("store1").run ->
+			db2.batch "store1", ->
 				store1.add
 					pos_x: 0
 					pos_y: 0
