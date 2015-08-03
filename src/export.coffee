@@ -8,13 +8,9 @@ else if module?.exports?
 
 #DOM or WebWorker
 else
-	if not @.hasOwnProperty 'IDB'
-		@.IDB = DatabaseManager
-	else if not @.hasOwnProperty '$IDB'
-		@.$IDB = DatabaseManager
+	if env.hasOwnProperty 'IDB'
+		otherLib = env['IDB']
+		env.IDB = DatabaseManager
+		env.IDB.noConflict = -> otherLib
 	else
-		msg = "Fail to export IDB: name 'IDB' and '$IDB' is in use."
-		if typeof console?.error is "function"
-			console.error msg
-		else
-			throw msg
+		env.IDB = DatabaseManager

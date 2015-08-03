@@ -1,5 +1,5 @@
 (function() {
-  var Database, DatabaseManager, IDBError, IDBKeyRange, IDBRequest2Q, IDBTransaction, IDBTx2Q, Query, Schema, Store, env, indexedDB, msg, newDefer, newPromise, toPromise,
+  var Database, DatabaseManager, IDBError, IDBKeyRange, IDBRequest2Q, IDBTransaction, IDBTx2Q, Query, Schema, Store, env, indexedDB, newDefer, newPromise, otherLib, toPromise,
     extend = function(child, parent) { for (var key in parent) { if (hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; },
     hasProp = {}.hasOwnProperty,
     slice = [].slice,
@@ -747,17 +747,14 @@
   } else if ((typeof module !== "undefined" && module !== null ? module.exports : void 0) != null) {
     module.exports = DatabaseManager;
   } else {
-    if (!this.hasOwnProperty('IDB')) {
-      this.IDB = DatabaseManager;
-    } else if (!this.hasOwnProperty('$IDB')) {
-      this.$IDB = DatabaseManager;
+    if (env.hasOwnProperty('IDB')) {
+      otherLib = env['IDB'];
+      env.IDB = DatabaseManager;
+      env.IDB.noConflict = function() {
+        return otherLib;
+      };
     } else {
-      msg = "Fail to export IDB: name 'IDB' and '$IDB' is in use.";
-      if (typeof (typeof console !== "undefined" && console !== null ? console.error : void 0) === "function") {
-        console.error(msg);
-      } else {
-        throw msg;
-      }
+      env.IDB = DatabaseManager;
     }
   }
 
