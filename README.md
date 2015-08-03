@@ -3,6 +3,7 @@ This wrapper is aimed to simplify the use of indexedDB and is designed as lazy a
 
 
 ## Usage
+
 Get a database reference:
 ```js
 //get a reference of the indexedDB named "app_db"
@@ -18,11 +19,15 @@ users = IDB('app_db').store('users');
 Define a database schema:
 ```js
 IDB('app_db').version(1, {
+    
+    //store named "users"
     "users": [
         "KEY(id) AUTO",  //the keypath of the objects will be auto increased and assgin to the property "id"
         "name",  //the property named "idx1" will be well indexed
         "email UNIQUE" //the index will not allow duplicate values for a single key
     ],
+    
+    //store named "locaions"
     "locations": [
         "KEY AUTO",  //the key will be auto increased but not assign into the objects
         "name",
@@ -44,7 +49,7 @@ IDB('app_db').version(1, {
         "idx3 ARRAY"
 }).version(2, {
     "store1", [
-        "KEY AUTO",  //key can not make any change
+        "KEY AUTO",  //do not make any change on store's keypath
         "idx1 ARRAY",  //can re-index with "multi-entry" feature
         "idx2",  //can remove "unique" feature, but cannot add it back
         "idx3", //can re-index without "multi-entry" feature
@@ -53,9 +58,10 @@ IDB('app_db').version(1, {
 ```
 The database will only upgrade to the largest version and skip all other smaller versions. You can, however, define different versions in your code for readability.
 
-##### accessing stored data
+#### accessing stored data
 The following operations will open (and upgrade if need) corresponding database to access data in stores.
 
+##### retrieving meta data
 Get database's name:
 ```js
 IDB('app_db').name().then(function(dbName) {
@@ -86,12 +92,13 @@ IDB('app_db').store('users').key().then(function(keyPath) {
 
 Get store's index names:
 ```js
-IDB('app_db').store('users').indexes.then(function(indexNames) {
+IDB('app_db').store('users').indexes().then(function(indexNames) {
     for (var i in indexNames) { console.log(indexNames[i]); } //array of index names
 });
 ```
 
-Interact with store:
+##### access store objects
+add/update/delete objects in store:
 ```js
 users = IDB('app_db').store('users');
 
@@ -126,7 +133,8 @@ IDB("app_db").batch("users", "locations", function(users, locations) {
 });
 ```
 
-Query store:
+##### Query
+query store's objects over a defined index:
 ```js
 locations = IDB('app_db').store('locations');
 
@@ -176,22 +184,27 @@ query16l2 = query16.limit(3, 6); //limit to the first 6 items starting at the 3r
 
 
 //get the first reached item
-query01.first(function(item) {/*...*/});
+query01.first(function(item, key) {/*...*/});
 
 //iterate each item
 query03.each(function(item, key) {/*...*/});
 
 //get the whole result set
-query05.list(function(itemArray) {/*...*/});
+query05.list(function(itemArray, keyArray) {/*...*/});
 
 //count the number of items in the result set
 query07.count(function(totalNumber) {/*...*/});
 
 
 //you can chaining the function call above:
-IDB('app_db').store('locations').where('position < [5,9]').order(-1).limit(2,2).each(function(item) {
+IDB('app_db').store('locations').where('position < [5,9]').order(-1).limit(2,2).each(function(item, key) {
     //do something with each item
-}).then(function() {
+    return [key, item.x];
+}).then(function(iteratedResult) {
     //do something after query
+    for (var i in iteratedResult) {
+        d = iteratedResult[i];
+        console.log("object(key="+d[0]+") has property x with value "+d[1]);
+    }
 });
 ```
