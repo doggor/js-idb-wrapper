@@ -60,7 +60,7 @@ describe "Test: js-idb-wrapper", ->
 			
 			db1.version()
 			.then (dbVersion)->
-				expect(dbVersion).toEqual(1)
+				expect(dbVersion).toBe(1)
 				done()
 			.catch done.fail
 	
@@ -271,7 +271,7 @@ describe "Test: js-idb-wrapper", ->
 			
 			
 			
-			it "can query data using 'a=b'", (done)->
+			it "can query index using 'a=b'", (done)->
 				
 				store1.where "last_name = Tester"
 				.count (total)->
@@ -282,7 +282,7 @@ describe "Test: js-idb-wrapper", ->
 			
 			
 			
-			it "can query data using 'a<b'", (done)->
+			it "can query index using 'a<b'", (done)->
 				
 				store1.where "age < 24"
 				.count (result)->
@@ -293,7 +293,7 @@ describe "Test: js-idb-wrapper", ->
 			
 			
 			
-			it "can query data using 'a>b'", (done)->
+			it "can query index using 'a>b'", (done)->
 				
 				store1.where "age > 20"
 				.count (result)->
@@ -517,7 +517,7 @@ describe "Test: js-idb-wrapper", ->
 				.version 1, 
 					"store1": [
 						"KEY AUTO"
-						"position(pos_x, pos_y)"
+						"position(pos_x, pos_y) UNIQUE"
 						"tags ARRAY"]
 		
 		
@@ -571,7 +571,7 @@ describe "Test: js-idb-wrapper", ->
 				store1 = db2.store('store1')
 			
 			
-			it "can query composite index using 'a=[x,y]'", (done)->
+			it "can query compound index using 'a=[x,y]'", (done)->
 				
 				store1.where "position = [1, 1]"
 				.first (item)->
@@ -583,13 +583,135 @@ describe "Test: js-idb-wrapper", ->
 			
 			
 			
-			it "can query composite index using '[x1,y1]<=a<=[x2,y2]'", (done)->
+			it "can query compound index using 'a<[x,y]'", (done)->
+				
+				store1.where "position < [1,1]"
+				.count (result)->
+					expect(result).toBe(3)
+					done()
+				.catch done.fail
+			
+			
+			
+			
+			it "can query compound index using 'a>[x,y]'", (done)->
+				
+				store1.where "position > [1,1]"
+				.count (result)->
+					expect(result).toBe(2)
+					done()
+				.catch done.fail
+			
+			
+			
+			
+			it "can query compound index using 'a<=[x,y]'", (done)->
+				
+				store1.where "position <= [1,1]"
+				.count (result)->
+					expect(result).toBe(4)
+					done()
+				.catch done.fail
+			
+			
+			
+			
+			it "can query compound index using 'a>=[x,y]'", (done)->
+				
+				store1.where "position >= [1,1]"
+				.count (result)->
+					expect(result).toBe(3)
+					done()
+				.catch done.fail
+			
+			
+			
+			
+			it "can query compound index using '[x1,y1]<b<[x2,y2]'", (done)->
+				
+				store1.where "[1,0] < position < [3,4]"
+				.count (result)->
+					expect(result).toBe(2)
+					done()
+				.catch done.fail
+			
+			
+			
+			
+			it "can query compound index using '[x1,y1]<=b<[x2,y2]'", (done)->
+				
+				store1.where "[1,0] <= position < [3,4]"
+				.count (result)->
+					expect(result).toBe(3)
+					done()
+				.catch done.fail
+			
+			
+			
+			
+			it "can query compound index using '[x1,y1]<b<=[x2,y2]'", (done)->
+				
+				store1.where "[1,0] < position <= [3,4]"
+				.count (result)->
+					expect(result).toBe(3)
+					done()
+				.catch done.fail
+			
+			
+			
+			
+			it "can query compound index using '[x1,y1]<=a<=[x2,y2]'", (done)->
 				
 				store1.where "[0,0] <= position <= [1,1]"
 				.list (items)->
 					expect(items.length).toBe(4)
 					done()
 				.catch done.fail
+			
+			
+			
+			
+			it "can query compound index using '[x1,y1]>b>[x2,y2]'", (done)->
+				
+				store1.where "[3,4] > position > [1,1]"
+				.count (result)->
+					expect(result).toBe(1)
+					done()
+				.catch done.fail
+			
+			
+			
+			
+			it "can query compound index using '[x1,y1]>=b>[x2,y2]'", (done)->
+				
+				store1.where "[3,4] >= position > [1,1]"
+				.count (result)->
+					expect(result).toBe(2)
+					done()
+				.catch done.fail
+			
+			
+			
+			
+			it "can query compound index using '[x1,y1]>b>=[x2,y2]'", (done)->
+				
+				store1.where "[3,4] > position >= [1,1]"
+				.count (result)->
+					expect(result).toBe(2)
+					done()
+				.catch done.fail
+			
+			
+			
+			
+			it "can query compound index using '[x1,y1]>=b>=[x2,y2]'", (done)->
+				
+				store1.where "[3,4] >= position >= [1,1]"
+				.count (result)->
+					expect(result).toBe(3)
+					done()
+				.catch done.fail
+			
 			
 			
 			
@@ -600,35 +722,32 @@ describe "Test: js-idb-wrapper", ->
 					expect(items.length).toBe(4)
 					done()
 				.catch done.fail
-	
-	
-	
-	
-		describe "close IDB('db2') for upgrade", ->
-			
-			
-			beforeAll (done)->
-				indexedDB.close()
-				#wait a while
-				setTimeout( (->done()) , 1000)
 		
 		
 		
-			
-		describe "define version 2 schema for IDB('db2')", ->
-			
-			db2 = null
+		
+		describe "upgrade IDB('db2') to version 2", ->
 			
 			beforeAll ->
-				#define the db
-				db2 = IDB("db2")
-					.version 1, 
-						"store1": [
-							"KEY AUTO"
-							pos_x,  #adding new index
-							pos_y,  #adding new index
-							"position(pos_x, pos_y)"
-							"tags ARRAY"]
+				#define the db2(v2)
+				db2.version 2, 
+					"store1": [
+						"KEY AUTO"
+						"pos_x",                  #adding new index
+						"pos_y",                  #adding new index
+						"position(pos_x, pos_y)"  #remove UNIQUE
+						]                         #remove index:tags
+			
+			
+			
+			
+			it "should has version number 2", (done)->
+				
+				db2.version()
+				.then (dbVersion)->
+					expect(dbVersion).toBe(2)
+					done()
+				.catch done.fail
 		
 		
 		
@@ -641,12 +760,53 @@ describe "Test: js-idb-wrapper", ->
 				store1 = db2.store('store1')
 			
 			
+			it "should have new index collection", (done)->
+				
+				store1.indexes()
+				.then (indexNameList)->
+					expect(indexNameList).toContain('pos_x')
+					expect(indexNameList).toContain('pos_y')
+					expect(indexNameList).toContain('position')
+					expect(indexNameList).not.toContain('tags')
+					done()
+				.catch done.fail
+			
+			
+			
+			
 			it "can access newly added index", (done)->
 				
 				store1.where "pos_x = 2"
 				.list (items)->
 					expect(items.length).toBe(1)
 					done()
+				.catch done.fail
+			
+			
+			
+			
+			it "should not able to access removed index", (done)->
+				
+				store1.where "tags = html"
+				.list (items)->
+					done.fail("index:tags not yet removed as expected.")
+				.catch (err)->
+					expect(err.name).toBe("NotFoundError")
+					done()
+			
+			
+			
+			
+			it "can now add duplicated data to the index with 'UNIQUE' feature removed", (done)->
+				
+				store1.add
+					pos_x: 0
+					pos_y: 0
+					tags: ["html"]
+				.then ->
+					store1.where("position = [0,0]").list (items)->
+						expect(items.length).toBe(2)
+						done()
 				.catch done.fail
 	
 	

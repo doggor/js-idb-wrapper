@@ -13,13 +13,11 @@ class Query
 	
 	
 	#return IDBIndex if indexName given on constructing, else return back the given IDBStore object
+	#may throw NotFoundError if index not found
 	getIDBIndexIfSet: (idbStore)->
-		try
-			if @_indexName
-				idbStore.index(@_indexName)
-			else
-				idbStore
-		catch err
+		if @_indexName isnt null
+			idbStore.index(@_indexName)
+		else
 			idbStore
 			
 	

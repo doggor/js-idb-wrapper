@@ -93,7 +93,7 @@
     request.onsuccess = function(event) {
       return deferred.resolve(event);
     };
-    request.onerror = request.onblocked = function(event) {
+    request.onerror = function(event) {
       return deferred.reject(event);
     };
     return toPromise(deferred);
@@ -253,15 +253,9 @@
     }
 
     Query.prototype.getIDBIndexIfSet = function(idbStore) {
-      var err;
-      try {
-        if (this._indexName) {
-          return idbStore.index(this._indexName);
-        } else {
-          return idbStore;
-        }
-      } catch (_error) {
-        err = _error;
+      if (this._indexName !== null) {
+        return idbStore.index(this._indexName);
+      } else {
         return idbStore;
       }
     };
@@ -543,6 +537,10 @@
       } else if (this._version === null || this._version <= versionNumber) {
         this._dbDefinition = dbDefination;
         this._version = versionNumber;
+        if (this._idbDatabase !== null) {
+          this._idbDatabase.close();
+          this._idbDatabase = this._batchTx = null;
+        }
         return this;
       }
     };
@@ -556,29 +554,25 @@
       if (this._idbDatabase != null) {
         return newPromise(this._idbDatabase);
       } else {
-        console.log("open db " + this._name + " " + this._version);
         r = indexedDB.open(this._name, this._version);
         r.onupgradeneeded = (function(_this) {
           return function(event) {
-            console.log(_this._name + " onupgradeneeded");
-            return _this.doUpgrade(event.target.result);
+            return _this.doUpgrade(event.target.result, event.target.transaction);
           };
         })(this);
-        return IDBRequest2Q(r)["catch"]((function(_this) {
+        r.onblocked = (function(_this) {
           return function(event) {
-            if (event instanceof IDBVersionChangeEvent) {
-              console.log(_this._name + " onblocked");
-              if (typeof _this._onVersionConflictHandler === "function") {
-                return _this._onVersionConflictHandler();
-              }
+            if (event.newVersion === _this._version) {
+
             } else {
-              console.log(_this._name + " onerror");
-              throw event;
+              if (typeof _this._onVersionConflictHandler === "function") {
+                return _this._onVersionConflictHandler(event);
+              }
             }
           };
-        })(this)).then((function(_this) {
+        })(this);
+        return IDBRequest2Q(r).then((function(_this) {
           return function(event) {
-            console.log(_this._name + " onsuccess");
             return _this._idbDatabase = event.target.result;
           };
         })(this));
@@ -599,14 +593,19 @@
       return new Store(storeName, this);
     };
 
+    Database.prototype.close = function() {
+      this._idbDatabase.close();
+      return this._idbDatabase = this._batchTx = null;
+    };
+
     Database.prototype.remove = function() {
-      return IDBRequest2Q(indexedDB.deleteDatabase(this._name))["catch"]((function(_this) {
-        return function(event) {
-          if (!event instanceof IDBVersionChangeEvent) {
-            throw event;
-          }
-        };
-      })(this)).then((function(_this) {
+      var deferred, r;
+      r = indexedDB.deleteDatabase(this._name);
+      deferred = newDefer();
+      r.onblocked = deferred.resolve;
+      r.onerror = deferred.reject;
+      r.onsuccess = deferred.resolve;
+      return (toPromise(deferred)).then((function(_this) {
         return function() {
           return _this._name = _this._version = _this._dbDefinition = _this._onVersionConflictHandler = _this._idbDatabase = _this._batchTx = null;
         };
@@ -637,59 +636,68 @@
       };
     };
 
-    Database.prototype.doUpgrade = function(idb) {
-      var _schema, action, actions, currentStoreNames, fn1, fn2, i, indexName, indexSchema, j, len, len1, ref, ref1, results1, store, storeName, storeSchema, tx;
+    Database.prototype.doUpgrade = function(idb, tx) {
+      var _schema, action, actions, currentStoreNames, fn1, fn2, i, indexName, indexSchema, j, len, len1, ref, ref1, results1, store, storeName, storeSchema;
       if (this._dbDefinition === null) {
         throw new IDBError("DB definition not found.");
       }
       _schema = new Schema(this._dbDefinition);
       actions = [];
       currentStoreNames = idb.objectStoreNames;
-      if (currentStoreNames.length > 0) {
-        tx = idb.transaction(currentStoreNames, "readwrite");
-        fn1 = function(storeName) {
-          var currentIndexNames, indexName, j, len1, results1, store, storeSchema;
-          if (_schema.stores.hasOwnProperty(storeName)) {
-            store = tx.objectStore(storeName);
-            currentIndexNames = store.indexNames;
-            storeSchema = _schema.stores[storeName];
-            results1 = [];
-            for (j = 0, len1 = currentIndexNames.length; j < len1; j++) {
-              indexName = currentIndexNames[j];
-              results1.push((function(indexName) {
-                var index, indexSchema;
-                if (storeSchema.indexes.hasOwnProperty(indexName)) {
-                  index = store.index(indexName);
-                  indexSchema = storeSchema.indexes[indexName];
-                  if (!index.unique && indexSchema.option.unique) {
-                    throw new IDBError("Turning existed index(" + indexName + ") to be unique is not allowed.");
-                  }
-                  if (index.keyPath !== indexSchema.key || index.unique !== indexSchema.option.unique || index.multiEntry !== indexSchema.option.multiEntry) {
-                    actions.push(function() {
-                      return store.deleteIndex(indexName);
-                    });
-                    return actions.push(function() {
-                      return store.createIndex(indexName, indexSchema.key, indexSchema.option);
-                    });
-                  }
-                } else {
-                  return actions.push(function() {
-                    return store.deleteIndex(indexName);
-                  });
-                }
-              })(indexName));
+      fn1 = function(storeName) {
+        var currentIndexNames, fn2, indexName, indexSchema, j, len1, ref, results1, store, storeSchema;
+        if (_schema.stores.hasOwnProperty(storeName)) {
+          store = tx.objectStore(storeName);
+          currentIndexNames = store.indexNames;
+          storeSchema = _schema.stores[storeName];
+          fn2 = function(indexName) {
+            var index, indexSchema;
+            if (storeSchema.indexes.hasOwnProperty(indexName)) {
+              index = store.index(indexName);
+              indexSchema = storeSchema.indexes[indexName];
+              if (!index.unique && indexSchema.option.unique) {
+                throw new IDBError("Turning existed index(" + indexName + ") to be unique is not allowed.");
+              }
+              if (index.keyPath !== indexSchema.key || index.unique !== indexSchema.option.unique || index.multiEntry !== indexSchema.option.multiEntry) {
+                actions.push(function() {
+                  return store.deleteIndex(indexName);
+                });
+                return actions.push(function() {
+                  return store.createIndex(indexName, indexSchema.key, indexSchema.option);
+                });
+              }
+            } else {
+              return actions.push(function() {
+                return store.deleteIndex(indexName);
+              });
             }
-            return results1;
-          } else {
-            return actions.push(function() {
-              return idb.deleteObjectStore(storeName);
-            });
+          };
+          for (j = 0, len1 = currentIndexNames.length; j < len1; j++) {
+            indexName = currentIndexNames[j];
+            fn2(indexName);
           }
-        };
-        for (i = 0, len = currentStoreNames.length; i < len; i++) {
-          storeName = currentStoreNames[i];
-          fn1(storeName);
+          ref = storeSchema.indexes;
+          results1 = [];
+          for (indexName in ref) {
+            indexSchema = ref[indexName];
+            if (indexOf.call(currentIndexNames, indexName) < 0) {
+              results1.push((function(store, indexName, indexSchema) {
+                return actions.push(function() {
+                  return store.createIndex(indexName, indexSchema.key, indexSchema.option);
+                });
+              })(store, indexName, indexSchema));
+            }
+          }
+          return results1;
+        } else {
+          return actions.push(function() {
+            return idb.deleteObjectStore(storeName);
+          });
         }
+      };
+      for (i = 0, len = currentStoreNames.length; i < len; i++) {
+        storeName = currentStoreNames[i];
+        fn1(storeName);
       }
       ref = _schema.stores;
       for (storeName in ref) {

@@ -38,7 +38,7 @@
       });
       it("can return the version", function(done) {
         return db1.version().then(function(dbVersion) {
-          expect(dbVersion).toEqual(1);
+          expect(dbVersion).toBe(1);
           return done();
         })["catch"](done.fail);
       });
@@ -222,19 +222,19 @@
             return done();
           })["catch"](done.fail);
         });
-        it("can query data using 'a=b'", function(done) {
+        it("can query index using 'a=b'", function(done) {
           return store1.where("last_name = Tester").count(function(total) {
             expect(total).toBe(3);
             return done();
           })["catch"](done.fail);
         });
-        it("can query data using 'a<b'", function(done) {
+        it("can query index using 'a<b'", function(done) {
           return store1.where("age < 24").count(function(result) {
             expect(result).toBe(2);
             return done();
           })["catch"](done.fail);
         });
-        it("can query data using 'a>b'", function(done) {
+        it("can query index using 'a>b'", function(done) {
           return store1.where("age > 20").count(function(result) {
             expect(result).toBe(2);
             return done();
@@ -376,7 +376,7 @@
       db2 = null;
       beforeAll(function() {
         return db2 = IDB("db2").version(1, {
-          "store1": ["KEY AUTO", "position(pos_x, pos_y)", "tags ARRAY"]
+          "store1": ["KEY AUTO", "position(pos_x, pos_y) UNIQUE", "tags ARRAY"]
         });
       });
       it("can batch insert data as usual", function(done) {
@@ -427,16 +427,82 @@
         beforeAll(function() {
           return store1 = db2.store('store1');
         });
-        it("can query composite index using 'a=[x,y]'", function(done) {
+        it("can query compound index using 'a=[x,y]'", function(done) {
           return store1.where("position = [1, 1]").first(function(item) {
             expect(item.pos_x).toBe(1);
             expect(item.pos_y).toBe(1);
             return done();
           })["catch"](done.fail);
         });
-        it("can query composite index using '[x1,y1]<=a<=[x2,y2]'", function(done) {
+        it("can query compound index using 'a<[x,y]'", function(done) {
+          return store1.where("position < [1,1]").count(function(result) {
+            expect(result).toBe(3);
+            return done();
+          })["catch"](done.fail);
+        });
+        it("can query compound index using 'a>[x,y]'", function(done) {
+          return store1.where("position > [1,1]").count(function(result) {
+            expect(result).toBe(2);
+            return done();
+          })["catch"](done.fail);
+        });
+        it("can query compound index using 'a<=[x,y]'", function(done) {
+          return store1.where("position <= [1,1]").count(function(result) {
+            expect(result).toBe(4);
+            return done();
+          })["catch"](done.fail);
+        });
+        it("can query compound index using 'a>=[x,y]'", function(done) {
+          return store1.where("position >= [1,1]").count(function(result) {
+            expect(result).toBe(3);
+            return done();
+          })["catch"](done.fail);
+        });
+        it("can query compound index using '[x1,y1]<b<[x2,y2]'", function(done) {
+          return store1.where("[1,0] < position < [3,4]").count(function(result) {
+            expect(result).toBe(2);
+            return done();
+          })["catch"](done.fail);
+        });
+        it("can query compound index using '[x1,y1]<=b<[x2,y2]'", function(done) {
+          return store1.where("[1,0] <= position < [3,4]").count(function(result) {
+            expect(result).toBe(3);
+            return done();
+          })["catch"](done.fail);
+        });
+        it("can query compound index using '[x1,y1]<b<=[x2,y2]'", function(done) {
+          return store1.where("[1,0] < position <= [3,4]").count(function(result) {
+            expect(result).toBe(3);
+            return done();
+          })["catch"](done.fail);
+        });
+        it("can query compound index using '[x1,y1]<=a<=[x2,y2]'", function(done) {
           return store1.where("[0,0] <= position <= [1,1]").list(function(items) {
             expect(items.length).toBe(4);
+            return done();
+          })["catch"](done.fail);
+        });
+        it("can query compound index using '[x1,y1]>b>[x2,y2]'", function(done) {
+          return store1.where("[3,4] > position > [1,1]").count(function(result) {
+            expect(result).toBe(1);
+            return done();
+          })["catch"](done.fail);
+        });
+        it("can query compound index using '[x1,y1]>=b>[x2,y2]'", function(done) {
+          return store1.where("[3,4] >= position > [1,1]").count(function(result) {
+            expect(result).toBe(2);
+            return done();
+          })["catch"](done.fail);
+        });
+        it("can query compound index using '[x1,y1]>b>=[x2,y2]'", function(done) {
+          return store1.where("[3,4] > position >= [1,1]").count(function(result) {
+            expect(result).toBe(2);
+            return done();
+          })["catch"](done.fail);
+        });
+        it("can query compound index using '[x1,y1]>=b>=[x2,y2]'", function(done) {
+          return store1.where("[3,4] >= position >= [1,1]").count(function(result) {
+            expect(result).toBe(3);
             return done();
           })["catch"](done.fail);
         });
@@ -447,20 +513,17 @@
           })["catch"](done.fail);
         });
       });
-      describe("close IDB('db2') for upgrade", function() {
-        return beforeAll(function(done) {
-          indexedDB.close();
-          return setTimeout((function() {
-            return done();
-          }), 1000);
-        });
-      });
-      describe("define version 2 schema for IDB('db2')", function() {
-        db2 = null;
-        return beforeAll(function() {
-          return db2 = IDB("db2").version(1, {
-            "store1": ["KEY AUTO", pos_x, pos_y, "position(pos_x, pos_y)", "tags ARRAY"]
+      describe("upgrade IDB('db2') to version 2", function() {
+        beforeAll(function() {
+          return db2.version(2, {
+            "store1": ["KEY AUTO", "pos_x", "pos_y", "position(pos_x, pos_y)"]
           });
+        });
+        return it("should has version number 2", function(done) {
+          return db2.version().then(function(dbVersion) {
+            expect(dbVersion).toBe(2);
+            return done();
+          })["catch"](done.fail);
         });
       });
       return describe("IDB('db2').store('store1')", function() {
@@ -469,10 +532,39 @@
         beforeAll(function() {
           return store1 = db2.store('store1');
         });
-        return it("can access newly added index", function(done) {
+        it("should have new index collection", function(done) {
+          return store1.indexes().then(function(indexNameList) {
+            expect(indexNameList).toContain('pos_x');
+            expect(indexNameList).toContain('pos_y');
+            expect(indexNameList).toContain('position');
+            expect(indexNameList).not.toContain('tags');
+            return done();
+          })["catch"](done.fail);
+        });
+        it("can access newly added index", function(done) {
           return store1.where("pos_x = 2").list(function(items) {
             expect(items.length).toBe(1);
             return done();
+          })["catch"](done.fail);
+        });
+        it("should not able to access removed index", function(done) {
+          return store1.where("tags = html").list(function(items) {
+            return done.fail("index:tags not yet removed as expected.");
+          })["catch"](function(err) {
+            expect(err.name).toBe("NotFoundError");
+            return done();
+          });
+        });
+        return it("can now add duplicated data to the index with 'UNIQUE' feature removed", function(done) {
+          return store1.add({
+            pos_x: 0,
+            pos_y: 0,
+            tags: ["html"]
+          }).then(function() {
+            return store1.where("position = [0,0]").list(function(items) {
+              expect(items.length).toBe(2);
+              return done();
+            });
           })["catch"](done.fail);
         });
       });

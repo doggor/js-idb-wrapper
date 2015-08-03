@@ -49,3 +49,6 @@ gulp.task 'spec', ->
 		.pipe coffee()
 		.pipe gulp.dest "test/spec"
 	
+
+gulp.task 'spec:watch', ->
+	gulp.watch "test/spec/**/*.coffee", ['spec']

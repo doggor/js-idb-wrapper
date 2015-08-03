@@ -31,6 +31,13 @@ class Database
 		else if @_version is null or @_version <= versionNumber
 			@_dbDefinition = dbDefination
 			@_version = versionNumber
+			
+			#close current idb connection if any
+			if @_idbDatabase isnt null
+				@_idbDatabase.close()
+				@_idbDatabase = 
+				@_batchTx = null
+			
 			@  #return this for chaining
 	
 	
@@ -48,21 +55,16 @@ class Database
 		if @_idbDatabase?
 			newPromise @_idbDatabase
 		else
-			console.log "open db #{@_name} #{@_version}"
 			r = indexedDB.open(@_name, @_version)
-			r.onupgradeneeded = (event)=>
-				console.log "#{@_name} onupgradeneeded"
-				@doUpgrade(event.target.result)
-			IDBRequest2Q( r )
-			.catch (event)=>
-				if event instanceof IDBVersionChangeEvent
-					console.log "#{@_name} onblocked"
-					@_onVersionConflictHandler() if typeof @_onVersionConflictHandler is "function"
+			r.onupgradeneeded = (event)=>@doUpgrade(event.target.result, event.target.transaction)
+			r.onblocked = (event)=>
+				if event.newVersion is @_version  #check if required version is defined
+					return  #simply return
 				else
-					console.log "#{@_name} onerror"
-					throw event
+					@_onVersionConflictHandler(event) if typeof @_onVersionConflictHandler is "function"
+				
+			IDBRequest2Q( r )
 			.then (event)=>
-				console.log "#{@_name} onsuccess"
 				@_idbDatabase = event.target.result
 	
 	
@@ -98,10 +100,13 @@ class Database
 	#remove the database form disk
 	#this object will no longer usable
 	remove: ->
-		IDBRequest2Q( indexedDB.deleteDatabase(@_name) )
-		.catch (event)=>
-			#ignore IDBVersionChangeEvent because we're deleteing db
-			throw event if not event instanceof IDBVersionChangeEvent
+		r = indexedDB.deleteDatabase(@_name)
+		deferred = newDefer()
+		#ignore onblocked(IDBVersionChangeEvent) because we're deleteing db
+		r.onblocked = deferred.resolve
+		r.onerror = deferred.reject
+		r.onsuccess = deferred.resolve
+		(toPromise deferred)
 		.then =>
 			#clear all properties
 			@_name = 
@@ -137,7 +142,7 @@ class Database
 	
 	
 	
-	doUpgrade: (idb)->
+	doUpgrade: (idb, tx)->
 		
 		if @_dbDefinition is null
 			throw new IDBError "DB definition not found."
@@ -149,43 +154,46 @@ class Database
 		
 		currentStoreNames = idb.objectStoreNames
 		
-		if currentStoreNames.length > 0
-			tx = idb.transaction(currentStoreNames, "readwrite")
-			
-			for storeName in currentStoreNames
-				do (storeName)->
-					#update existed stores
-					if _schema.stores.hasOwnProperty storeName
-						store = tx.objectStore(storeName)
-						currentIndexNames = store.indexNames
-						storeSchema = _schema.stores[storeName]
-						
-						for indexName in currentIndexNames
-							do (indexName)->
-								if storeSchema.indexes.hasOwnProperty indexName
-									index = store.index(indexName)
-									indexSchema = storeSchema.indexes[indexName]
-									
-									#adding UNIQUE for existed index is not allow
-									if not index.unique and indexSchema.option.unique
-										throw new IDBError("Turning existed index(#{indexName}) to be unique is not allowed.")
-									
-									#rebuild the index if any changes on schema
-									#TAKE YOU"RE OWN RISK!!
-									if (index.keyPath isnt indexSchema.key or
-									index.unique isnt indexSchema.option.unique or
-									index.multiEntry isnt indexSchema.option.multiEntry)
-										actions.push ->store.deleteIndex(indexName)
-										actions.push ->store.createIndex(indexName, indexSchema.key, indexSchema.option)
-									
-								#remove unused index
-								else
-									actions.push ->store.deleteIndex(indexName)
+		#update/remove indexes of current stores
+		for storeName in currentStoreNames
+			do (storeName)->
+				if _schema.stores.hasOwnProperty storeName
+					store = tx.objectStore(storeName)
+					currentIndexNames = store.indexNames
+					storeSchema = _schema.stores[storeName]
 					
-					#remove unused stores
-					else
-						actions.push ->idb.deleteObjectStore(storeName)
-			
+					for indexName in currentIndexNames
+						do (indexName)->
+							if storeSchema.indexes.hasOwnProperty indexName
+								index = store.index(indexName)
+								indexSchema = storeSchema.indexes[indexName]
+								
+								#adding UNIQUE for existed index is not allow
+								if not index.unique and indexSchema.option.unique
+									throw new IDBError("Turning existed index(#{indexName}) to be unique is not allowed.")
+								
+								#rebuild the index if any changes on schema
+								#TAKE YOU"RE OWN RISK!!
+								if (index.keyPath isnt indexSchema.key or
+								index.unique isnt indexSchema.option.unique or
+								index.multiEntry isnt indexSchema.option.multiEntry)
+									actions.push ->store.deleteIndex(indexName)
+									actions.push ->store.createIndex(indexName, indexSchema.key, indexSchema.option)
+								
+							#remove unused index
+							else
+								actions.push ->store.deleteIndex(indexName)
+					
+					#create newly added indexes
+					for indexName, indexSchema of storeSchema.indexes when indexName not in currentIndexNames
+						do (store, indexName, indexSchema)->
+							actions.push ->
+								store.createIndex(indexName, indexSchema.key, indexSchema.option)
+				
+				#remove unused stores
+				else
+					actions.push ->idb.deleteObjectStore(storeName)
+		
 		
 		#create newly added stores
 		for storeName, storeSchema of _schema.stores when storeName not in currentStoreNames
