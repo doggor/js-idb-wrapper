@@ -54,7 +54,7 @@ else if typeof env.jQuery isnt "undefined"
 	
 	
 else
-	throw new IDBError "Not compatible promise function found."
+	throw new IDBError "No compatible promise function found."
 
 
 newPromise = (result, error)->
