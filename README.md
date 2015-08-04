@@ -24,23 +24,24 @@ Define a database schema:
 //upgrade will be performed only when:
 //  1. the db is attempt to open for actual data read/write, and
 //  2. the stored db version is smaller than the largest defined version.
+
 IDB('app_db').version(1, {
     
     //store named "users"
     "users": [
         "KEY(id) AUTO",  //the keypath of the objects will be auto increased and assgin to the property "id"
-        "name",  //the property named "idx1" will be well indexed
-        "email UNIQUE" //the index will not allow duplicate values for a single key
+        "name",          //the property named "idx1" will be well indexed
+        "email UNIQUE"   //the index will not allow duplicate values for a single key
     ],
     
     //store named "locaions"
     "locations": [
-        "KEY AUTO",  //the key will be auto increased but not assign into the objects
+        "KEY AUTO",            //the key will be auto increased but not assign into the objects
         "name",
-        "pos.x",  //can index nested porperty
+        "pos.x",               //can index nested porperty
         "pos.y",
         "point(pos.x,pos.y)",  //compound index, where properties "x" and "y" can be found in the objects
-        "tags ARRAY" //the index will add an entry in the index for each array element
+        "tags ARRAY"          //the index will add an entry in the index for each array element
     ]
 });
 ```
@@ -55,10 +56,10 @@ IDB('app_db').version(1, {  //define version 1
         "idx3 ARRAY"
 }).version(2, {  //this is version 2
     "store1", [
-        "KEY AUTO",  //do not make any change on store's keypath
+        "KEY AUTO",    //do not make any change on store's keypath
         "idx1 ARRAY",  //can re-index with "multi-entry" feature
-        "idx2",  //can remove "unique" feature, but cannot add it back
-        "idx3", //can re-index without "multi-entry" feature
+        "idx2",        //can remove "unique" feature, but cannot add it back
+        "idx3",        //can re-index without "multi-entry" feature
 });
 //notice: the database will not upgrade util the first explicit operation perform.
 ```
@@ -68,44 +69,54 @@ The database will only upgrade to the largest version and skip all other smaller
 #### accessing stored data
 The following operations will open (and upgrade if need) corresponding database to access data in stores.
 
-Almost all of the functions will return a promise object. A promise object contains two functions:
-1. promise.then(), to retrieve data
-2. promise.catch(), to catch any exceptions.
+Almost all of the functions will return a promise object. A promise object contains two functions to handle cases:
+1. promise.catch(), to handle any exceptions raised from the operation
+2. promise.then(), to retrieve function returned data
 
 
 ##### retrieving meta data
 Get database's name:
 ```js
-IDB('app_db').name().then(function(dbName) {
-    console.log(dbName); //the database's name
+IDB('app_db').name(function(dbName) {
+    console.log(dbName);  //the database's name
+}).then(function() {
+    //do something after name get
 });
 ```
 
 Get database's version:
 ```js
-IDB('app_db').version().then(function(dbVersion) {
-    console.log(dbVersion); //the database's version
+IDB('app_db').version(function(dbVersion) {
+    console.log(dbVersion);  //the database's version
+}).then(function() {
+    //do something after version get
 });
 ```
 
 Get store's name:
 ```js
-IDB('app_db').store('users').name().then(function(storeName) {
-    console.log(storeName); //the store's name
+IDB('app_db').store('users').name(function(storeName) {
+    console.log(storeName);  //the store's name
+}).then(function() {
+    //do something after name get
 });
 ```
 
 Get store's keypath:
 ```js
 IDB('app_db').store('users').key().then(function(keyPath) {
-    console.log(keyPath); //the store's keypath
+    console.log(keyPath);  //the store's keypath
+}).then(function() {
+    //do something after keypath get
 });
 ```
 
 Get store's index names:
 ```js
-IDB('app_db').store('users').indexes().then(function(indexNames) {
-    for (var i in indexNames) { console.log(indexNames[i]); } //array of index names
+IDB('app_db').store('users').indexes(function(indexNames) {
+    for (var i in indexNames) { console.log(indexNames[i]); }  //array of index names
+}).then(function() {
+    //do something after index names get
 });
 ```
 
@@ -118,16 +129,30 @@ users = IDB('app_db').store('users');
 //add data
 users.add({name: "Andy", email: "andy@mail.com"}).then(function() {
     //do something after data added
+}).catch(function() {
+    //fail to add data
 });
 
 //update data with key(id) = 1
-users.update({id: 0, name: "Ben", email: "ben@mail.com").then(function(){/*...*/});
+users.update({id: 0, name: "Ben", email: "ben@mail.com").then(function(){
+    //do something after data updated
+}).catch(function() {
+    //fail to update data
+});
 
 //remove data with key = 1
-users.delete(0).then(function(){/*...*/});
+users.delete(0).then(function(){function(){
+    //do something after data deleted
+}).catch(function() {
+    //fail to delete data
+});
 
 //remove all data
-users.clear().then(function(){/*...*/});
+users.clear().then(function(){function(){
+    //do something after store clear
+}).catch(function() {
+    //fail to clear store
+});
 ```
 
 You can perform multiple operations on multiple stores in one database. All actions will be execute in one transaction:
@@ -143,6 +168,8 @@ IDB("app_db").batch("users", "locations", function(users, locations) {
     locations.remove(12);
 }).then(function() {
     //do something after operations done
+}).catch(function() {
+    //fail to complete all tasks, nothing changed
 });
 ```
 
@@ -154,7 +181,7 @@ locations = IDB('app_db').store('locations');
 
 query01 = locations.where("name = China");
 
-query02 = locations.where("name = 'Hong Kong'"); //use '...' if there are any spaces
+query02 = locations.where("name = 'Hong Kong'");  //use '...' if there are any spaces
 
 query03 = locations.where("pos.x > 5");
 
@@ -180,20 +207,20 @@ query13 = locations.where("9 > pos.x => 2");
 
 query14 = locations.where("8 => pos.x => 2");
 
-query15 = locations.where("[2,1] <= position <= [9,8]"); //use [...] for compound index
+query15 = locations.where("[2,1] <= position <= [9,8]");  //use [...] for compound index
 
-query16 = locations.all(); //select all objects in store, no filter here
+query16 = locations.all();  //select all objects in store, no filter here
 
 
 //reverse the result set
-query16r1 = query16.order(-1); //, or
+query16r1 = query16.order(-1);     //, or
 query16r2 = query16.order("desc"); //, or
 query16r3 = query16.order("DESC");
 
 
 //limit the result set (limitation always applied after order reversed.)
-query16l1 = query16.limit(5); //limit to the first 5 items
-query16l2 = query16.limit(3, 6); //limit to the first 6 items starting at the 3rd one
+query16l1 = query16.limit(5);  //limit to the first 5 items
+query16l2 = query16.limit(3, 6);  //limit to the first 6 items starting at the 3rd one
 
 
 //get the first reached item
@@ -219,6 +246,19 @@ IDB('app_db').store('locations').where('position < [5,9]').order(-1).limit(2,2).
         d = iteratedResult[i];
         console.log("object(key="+d[0]+") has property x with value "+d[1]);
     }
+    //...
+}).catch(function() {
+    //fail to query data
+});
+```
+
+##### remove database
+To remove the whole database, use reomve() function:
+```js
+IDB('app_db').remove().then(function() {
+    //do something after removed
+}).catch(function() {
+    //fail to remove database
 });
 ```
 
@@ -231,5 +271,5 @@ You can set a handler to deal with the case:
 IDB('app_db').onVersionConflict(function() {
     //handle the case here
     //for example, refresh the page
-});
+}).version(/*...*/);  //return the database reference for chaining
 ```
