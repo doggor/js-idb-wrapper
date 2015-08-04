@@ -65,7 +65,7 @@
       });
     };
   } else {
-    throw new IDBError("Not compatible promise function found.");
+    throw new IDBError("No compatible promise function found.");
   }
 
   newPromise = function(result, error) {
