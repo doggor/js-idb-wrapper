@@ -386,27 +386,27 @@
       })(this));
     };
 
-    Store.prototype.key = function() {
+    Store.prototype.key = function(cb) {
       return this.getIDBObjectStore("readonly").then(function(idbStore) {
-        return idbStore.keyPath;
+        return cb(idbStore.keyPath);
       });
     };
 
-    Store.prototype.name = function() {
+    Store.prototype.name = function(cb) {
       return this.getIDBObjectStore("readonly").then(function(idbStore) {
-        return idbStore.name;
+        return cb(idbStore.name);
       });
     };
 
-    Store.prototype.indexes = function() {
+    Store.prototype.indexes = function(cb) {
       return this.getIDBObjectStore("readonly").then(function(idbStore) {
-        return idbStore.indexNames;
+        return cb(idbStore.indexNames);
       });
     };
 
-    Store.prototype.isAutoKey = function() {
+    Store.prototype.isAutoKey = function(cb) {
       return this.getIDBObjectStore("readonly").then(function(idbStore) {
-        return idbStore.autoIncrement;
+        return cb(idbStore.autoIncrement);
       });
     };
 
@@ -523,30 +523,38 @@
       };
     }
 
-    Database.prototype.name = function() {
+    Database.prototype.name = function(cb) {
       return this.getIDBDatabase().then(function(idb) {
-        return idb.name;
+        return cb(idb.name);
       });
     };
 
-    Database.prototype.version = function(versionNumber, dbDefination) {
-      if (!versionNumber) {
+    Database.prototype.version = function() {
+      var args, cb, dbDefination, versionNumber;
+      args = 1 <= arguments.length ? slice.call(arguments, 0) : [];
+      if (args.length === 1) {
+        cb = args[0];
         return this.getIDBDatabase().then(function(idb) {
-          return idb.version;
+          return cb(idb.version);
         });
-      } else if (this._version === null || this._version <= versionNumber) {
-        this._dbDefinition = dbDefination;
-        this._version = versionNumber;
-        if (this._idbDatabase !== null) {
-          this._idbDatabase.close();
-          this._idbDatabase = this._batchTx = null;
+      } else if (args.length === 2) {
+        versionNumber = args[0];
+        dbDefination = args[1];
+        if (this._version === null || this._version <= versionNumber) {
+          this._dbDefinition = dbDefination;
+          this._version = versionNumber;
+          if (this._idbDatabase !== null) {
+            this._idbDatabase.close();
+            this._idbDatabase = this._batchTx = null;
+          }
+          return this;
         }
-        return this;
       }
     };
 
     Database.prototype.onVersionConflict = function(handler) {
-      return this._onVersionConflictHandler = handler;
+      this._onVersionConflictHandler = handler;
+      return this;
     };
 
     Database.prototype.getIDBDatabase = function() {

@@ -1,5 +1,5 @@
 # js-idb-wrapper
-This wrapper is aimed to simplify the use of indexedDB and is designed as lazy as it can: all databases and object stores will not be created, upgraded or opened as long as no any explicit data operations perform.
+This wrapper is aimed to simplify the use of indexedDB and is designed to work as lazy as it can: all databases and object stores will not be created, upgraded or opened as long as no any explicit data operations perform.
 
 
 ## Usage
@@ -7,17 +7,23 @@ This wrapper is aimed to simplify the use of indexedDB and is designed as lazy a
 Get a database reference:
 ```js
 //get a reference of the indexedDB named "app_db"
+//it wouldn't really open the db
 db = IDB('app_db');
 ```
 
 Get a object store reference:
 ```js
 //get a reference of the object store "users" inside the "app_db" indexedDB
+//it wouldn't really open the db
 users = IDB('app_db').store('users');
 ```
 
 Define a database schema:
 ```js
+//describing how object stores inside app_db would look like
+//upgrade will be performed only when:
+//  1. the db is attempt to open for actual data read/write, and
+//  2. the stored db version is smaller than the largest defined version.
 IDB('app_db').version(1, {
     
     //store named "users"
@@ -41,13 +47,13 @@ IDB('app_db').version(1, {
 
 You can upgrade the database by defining a larger version:
 ```js
-IDB('app_db').version(1, {
+IDB('app_db').version(1, {  //define version 1
     "store1": [
         "KEY AUTO",
         "idx1",
         "idx2 UNIQUE",
         "idx3 ARRAY"
-}).version(2, {
+}).version(2, {  //this is version 2
     "store1", [
         "KEY AUTO",  //do not make any change on store's keypath
         "idx1 ARRAY",  //can re-index with "multi-entry" feature
@@ -58,8 +64,14 @@ IDB('app_db').version(1, {
 ```
 The database will only upgrade to the largest version and skip all other smaller versions. You can, however, define different versions in your code for readability.
 
+
 #### accessing stored data
 The following operations will open (and upgrade if need) corresponding database to access data in stores.
+
+Almost all of the functions will return a promise object. A promise object contains two functions:
+1. promise.then(), to retrieve data
+2. promise.catch(), to catch any exceptions.
+
 
 ##### retrieving meta data
 Get database's name:
@@ -96,6 +108,7 @@ IDB('app_db').store('users').indexes().then(function(indexNames) {
     for (var i in indexNames) { console.log(indexNames[i]); } //array of index names
 });
 ```
+
 
 ##### access store objects
 add/update/delete objects in store:
@@ -206,5 +219,17 @@ IDB('app_db').store('locations').where('position < [5,9]').order(-1).limit(2,2).
         d = iteratedResult[i];
         console.log("object(key="+d[0]+") has property x with value "+d[1]);
     }
+});
+```
+
+
+#### on version conflict
+There may be a case that the database is ready to be upgraded but it is still in use somewhere, say, an older version of web page is opened in anther tab. (see: https://developer.mozilla.org/en-US/docs/Web/API/IDBOpenDBRequest/onblocked)
+
+You can set a handler to deal with the case:
+```js
+IDB('app_db').onVersionConflict(function() {
+    //handle the case here
+    //for example, refresh the page
 });
 ```

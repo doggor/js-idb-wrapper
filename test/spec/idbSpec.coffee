@@ -47,8 +47,7 @@ describe "Test: js-idb-wrapper", ->
 		
 		it "can return the name", (done)->
 			
-			db1.name()
-			.then (dbName)->
+			db1.name (dbName)->
 				expect(dbName).toBe("db1")
 				done()
 			.catch done.fail
@@ -58,8 +57,7 @@ describe "Test: js-idb-wrapper", ->
 		
 		it "can return the version", (done)->
 			
-			db1.version()
-			.then (dbVersion)->
+			db1.version (dbVersion)->
 				expect(dbVersion).toBe(1)
 				done()
 			.catch done.fail
@@ -103,8 +101,7 @@ describe "Test: js-idb-wrapper", ->
 			
 			it "can return the name", (done)->
 				
-				store1.name()
-				.then (storeName)->
+				store1.name (storeName)->
 					expect(storeName).toBe("store1")
 					done()
 				.catch done.fail
@@ -114,8 +111,7 @@ describe "Test: js-idb-wrapper", ->
 			
 			it "can return the key path", (done)->
 				
-				store1.key()
-				.then (keyPath)->
+				store1.key (keyPath)->
 					expect(keyPath).toBe("id")
 					done()
 				.catch done.fail
@@ -125,8 +121,7 @@ describe "Test: js-idb-wrapper", ->
 			
 			it "can return the index names", (done)->
 				
-				store1.indexes()
-				.then (indexNames)->
+				store1.indexes (indexNames)->
 					expect(indexNames).toContain("name")
 					expect(indexNames).toContain("first_name")
 					expect(indexNames).toContain("last_name")
@@ -141,8 +136,7 @@ describe "Test: js-idb-wrapper", ->
 			
 			it "can return whether key is auto increment", (done)->
 				
-				store1.isAutoKey()
-				.then (isAutoIncrement)->
+				store1.isAutoKey (isAutoIncrement)->
 					expect(isAutoIncrement).toBeTruthy()
 					done()
 				.catch done.fail
@@ -744,8 +738,7 @@ describe "Test: js-idb-wrapper", ->
 			
 			it "should has version number 2", (done)->
 				
-				db2.version()
-				.then (dbVersion)->
+				db2.version (dbVersion)->
 					expect(dbVersion).toBe(2)
 					done()
 				.catch done.fail
@@ -763,8 +756,7 @@ describe "Test: js-idb-wrapper", ->
 			
 			it "should have new index collection", (done)->
 				
-				store1.indexes()
-				.then (indexNameList)->
+				store1.indexes (indexNameList)->
 					expect(indexNameList).toContain('pos_x')
 					expect(indexNameList).toContain('pos_y')
 					expect(indexNameList).toContain('position')

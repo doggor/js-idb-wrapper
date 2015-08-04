@@ -19,25 +19,25 @@ class Store
 	
 	
 	#return the key path of the store
-	key: -> @getIDBObjectStore("readonly").then (idbStore)->idbStore.keyPath
+	key: (cb)-> @getIDBObjectStore("readonly").then (idbStore)->cb(idbStore.keyPath)
 	
 	
 	
 	
 	#return the name of the store
-	name: -> @getIDBObjectStore("readonly").then (idbStore)->idbStore.name
+	name: (cb)-> @getIDBObjectStore("readonly").then (idbStore)->cb(idbStore.name)
 	
 	
 	
 	
 	#return the list of indexes found in the store
-	indexes: -> @getIDBObjectStore("readonly").then (idbStore)->idbStore.indexNames
+	indexes: (cb)-> @getIDBObjectStore("readonly").then (idbStore)->cb(idbStore.indexNames)
 	
 	
 	
 	
 	#return boolean indecating if the store key is auto increment
-	isAutoKey: -> @getIDBObjectStore("readonly").then (idbStore)->idbStore.autoIncrement
+	isAutoKey: (cb)-> @getIDBObjectStore("readonly").then (idbStore)->cb(idbStore.autoIncrement)
 	
 	
 	

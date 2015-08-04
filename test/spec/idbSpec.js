@@ -31,13 +31,13 @@
         });
       });
       it("can return the name", function(done) {
-        return db1.name().then(function(dbName) {
+        return db1.name(function(dbName) {
           expect(dbName).toBe("db1");
           return done();
         })["catch"](done.fail);
       });
       it("can return the version", function(done) {
-        return db1.version().then(function(dbVersion) {
+        return db1.version(function(dbVersion) {
           expect(dbVersion).toBe(1);
           return done();
         })["catch"](done.fail);
@@ -75,19 +75,19 @@
           return store1 = db1.store('store1');
         });
         it("can return the name", function(done) {
-          return store1.name().then(function(storeName) {
+          return store1.name(function(storeName) {
             expect(storeName).toBe("store1");
             return done();
           })["catch"](done.fail);
         });
         it("can return the key path", function(done) {
-          return store1.key().then(function(keyPath) {
+          return store1.key(function(keyPath) {
             expect(keyPath).toBe("id");
             return done();
           })["catch"](done.fail);
         });
         it("can return the index names", function(done) {
-          return store1.indexes().then(function(indexNames) {
+          return store1.indexes(function(indexNames) {
             expect(indexNames).toContain("name");
             expect(indexNames).toContain("first_name");
             expect(indexNames).toContain("last_name");
@@ -98,7 +98,7 @@
           })["catch"](done.fail);
         });
         it("can return whether key is auto increment", function(done) {
-          return store1.isAutoKey().then(function(isAutoIncrement) {
+          return store1.isAutoKey(function(isAutoIncrement) {
             expect(isAutoIncrement).toBeTruthy();
             return done();
           })["catch"](done.fail);
@@ -518,7 +518,7 @@
           });
         });
         return it("should has version number 2", function(done) {
-          return db2.version().then(function(dbVersion) {
+          return db2.version(function(dbVersion) {
             expect(dbVersion).toBe(2);
             return done();
           })["catch"](done.fail);
@@ -531,7 +531,7 @@
           return store1 = db2.store('store1');
         });
         it("should have new index collection", function(done) {
-          return store1.indexes().then(function(indexNameList) {
+          return store1.indexes(function(indexNameList) {
             expect(indexNameList).toContain('pos_x');
             expect(indexNameList).toContain('pos_y');
             expect(indexNameList).toContain('position');
