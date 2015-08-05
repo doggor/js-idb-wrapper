@@ -1,6 +1,7 @@
 {
   "name": "js-idb-wrapper",
   "version": "0.0.1",
+  "homepage": "https://github.com/dogdoglization/js-idb-wrapper",
   "authors": [
     "Andy Ching <dogdoglization@gmail.com>"
   ],
@@ -15,7 +16,10 @@
   ],
   "keywords": [
     "indexeddb",
-    "wrapper"
+    "wrapper",
+    "database",
+    "dexie",
+    "IDBWrapper"
   ],
   "license": "MIT",
   "ignore": [

@@ -6,7 +6,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/dogdoglization/js-indexedDB-wrapper"
+    "url": "https://github.com/dogdoglization/js-idb-wrapper"
   },
   "devDependencies": {
     "coffee-script": "^1.9.3",

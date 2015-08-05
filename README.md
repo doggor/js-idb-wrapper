@@ -2,6 +2,62 @@
 This wrapper is aimed to simplify the use of indexedDB and is designed to work as lazy as it can: all databases and object stores will not be created, upgraded or opened as long as no any explicit data operations perform.
 
 
+## Quick Example
+Let see if we want to get users whose age are between 16 to 20:
+```js
+IDB('db1').store('users').where("16 < age < 20").list(
+    function(users) {
+        for (var i in users)
+            user = users[i];
+            console.log(user.name + ": " + user.age);
+    }
+);
+```
+If you know RDBMS, there can be multiple databases inside the system. It is the same for indexedDB. We use **IDB('db1')** to obtain a reference of the database named "db1" in indexedDB. Then, retrieving a reference of store "users" by **.store('users')**. There can be multiple object stores inside a database, just like tables in RDBMS. In the store, we try query users using **.where("16 < age < 20")**. Finally, retrieve the list of users through **.list(*****handler*****)**.
+
+it would be much clear if writing in coffeescript:
+```coffee
+IDB "db1"
+.store "users"
+.where "16 < age < 20"
+.list (users) -> console.log "#{user.name}: #{user.age}" for user in users
+```
+
+> We Are Lazy!
+> The database would not be opened as long as you're not going to handle the query result. it means that **IDB('db1').store('users').where("16 < age < 20")** will only returns a query object, but not actually query the stored data. The query will be made until you pass a handler, in this example, calling **.list(...)**.
+> Moreover, database creation and/or upgrade will not be performed until it is going to be open for some actions.
+
+
+## Installation
+
+#### pre-requirement
+This wrapper is built upon native indexedDB and highly depends on promise API. Before use it you should make sure the following 2 things:
+
+
+##### 1. browser compatibility
+The support of indexedDB may vary between browsers. For details, see http://caniuse.com/#feat=indexeddb
+
+You are recommended to use indexedDB as an optional functionality of the web application, and avoid using compound key and index for IE compatibility.
+
+
+##### 2. Promise/A+
+This wrapper will try the following promise API providers in order:
+1. [native Promise Object (ES6 feature)](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise)
+2. [q](http://documentup.com/kriskowal/q)
+3. [jQuery](http://api.jquery.com/category/deferred-object/)
+
+If none of the above can be found, this wrapper will throw an Error with message "No compatible promise function found." when initializing.
+
+
+#### include script
+You can manually retrieve the script file from [./release/idb.min.js](https://github.com/dogdoglization/js-idb-wrapper/blob/master/release/idb.min.js) of the repository and include it in your html file: 
+```html
+<script src="idb.min.js"></script>
+```
+
+
+
+
 ## Usage
 
 Get a database reference:
