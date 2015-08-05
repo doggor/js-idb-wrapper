@@ -24,7 +24,7 @@ IDB "db1"
 ```
 
 > We Are Lazy!
-> The database would not be opened as long as you're not going to handle the query result. it means that **IDB('db1').store('users').where("16 < age < 20")** will only returns a query object, but not actually query the stored data. The query will be made until you pass a handler, in this example, calling **.list(...)**.
+> The database would not be opened as long as you're not going to handle the query result. it means that **IDB('db1').store('users').where("16 < age < 20")** will only returns a query object, but not actually query the stored data. The query will be made after you pass a handler, in this example, calling **.list(...)**.
 > Moreover, database creation and/or upgrade will not be performed until it is going to be open for some actions.
 
 
